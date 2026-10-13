@@ -88,6 +88,7 @@ const parseUsers = env => {
 };
 const nameOf = id => USERS[id]?.name ?? id;
 const DIARY_CHECKS = 10; // 하루 첨삭 횟수(무료 AI 한도 보호)
+const withIds = cs => (cs ?? []).map(c => ({ ...c, id: c.id ?? String(c.at) })); // id가 없던 옛 댓글은 작성 시각을 id로
 
 let ready;
 const init = env =>
@@ -339,7 +340,10 @@ async function api(req, env, url) {
       const { results } = await env.DB.prepare("SELECT v FROM kv WHERE k LIKE 'user:%'").all();
       const users = results.map(r => JSON.parse(r.v));
       const together = streakOf(d => users.every(x => complete(x.days[d])));
-      return json({ me: u.id, together, users: users.map(stats) });
+      const t = today();
+      const out = [];
+      for (const x of users) out.push({ ...stats(x), diaryToday: !!(await get(env, `diary:${x.id}:${t}`))?.text }); // 오늘 일기 썼는지도 같이
+      return json({ me: u.id, together, users: out });
     }
     // ---------- 오늘의 영어 일기 ----------
     case 'GET /api/diary': {
@@ -354,7 +358,7 @@ async function api(req, env, url) {
       }
       const entries = Object.keys(USERS).map(uid => {
         const e = all.find(x => x.uid === uid && x.date === date);
-        return { uid, name: nameOf(uid), text: e?.text ?? '', comments: e?.comments ?? [], updatedAt: e?.updatedAt ?? null };
+        return { uid, name: nameOf(uid), text: e?.text ?? '', comments: withIds(e?.comments), updatedAt: e?.updatedAt ?? null };
       });
       return json({ me: u.id, date, today: t, prompt: promptOf(date), maxLen: MAX_LEN, checksLeft: DIARY_CHECKS - (u.diaryChecks?.[t] ?? 0), entries, days });
     }
@@ -404,7 +408,37 @@ async function api(req, env, url) {
       const k = `diary:${owner}:${date}`;
       const e = await get(env, k);
       if (!e?.text) throw err(404, '아직 일기가 없어요');
-      e.comments.push({ by: u.id, name: nameOf(u.id), text, at: Date.now() });
+      e.comments = withIds(e.comments);
+      // 답글은 한 단계만(댓글 → 답글). 답글에 또 답글은 없다
+      const parent = body.parent ? String(body.parent) : null;
+      if (parent && !e.comments.some(c => c.id === parent && !c.parent)) throw err(400, '답글을 달 댓글이 없어요');
+      e.comments.push({ id: randomHex(6), by: u.id, name: nameOf(u.id), text, at: Date.now(), ...(parent ? { parent } : {}) });
+      await put(env, k, e);
+      return json({ comments: e.comments });
+    }
+    case 'POST /api/diary/comment/edit':
+    case 'POST /api/diary/comment/delete': {
+      const owner = String(body.uid ?? '');
+      const date = String(body.date ?? '');
+      const id = String(body.id ?? '');
+      if (!USERS[owner] || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !id) throw err(400, '댓글을 확인해 주세요');
+      const k = `diary:${owner}:${date}`;
+      const e = await get(env, k);
+      if (!e?.text) throw err(404, '아직 일기가 없어요');
+      e.comments = withIds(e.comments);
+      const c = e.comments.find(x => x.id === id);
+      if (!c) throw err(404, '댓글이 없어요');
+      if (c.by !== u.id) throw err(403, '내 댓글만 고치거나 지울 수 있어요');
+      if (c.deleted) throw err(400, '삭제된 댓글이에요');
+      if (route.endsWith('/edit')) {
+        const text = String(body.text ?? '').trim().slice(0, 300);
+        if (!text) throw err(400, '내용을 써 주세요');
+        c.text = text;
+        c.editedAt = Date.now();
+      } else if (e.comments.some(x => x.parent === id)) {
+        c.deleted = true; // 답글이 달린 댓글은 자리만 남긴다
+        c.text = '';
+      } else e.comments = e.comments.filter(x => x.id !== id);
       await put(env, k, e);
       return json({ comments: e.comments });
     }

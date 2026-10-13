@@ -310,3 +310,16 @@ details summary { cursor: pointer; color: var(--primary); font-weight: 700; font
 .iconbtn.back { margin-left: -10px; color: var(--text); }
 
 .diary-card.done .mtag { background: var(--ok-soft); color: var(--ok-dark); }
+
+/* 댓글 스레드(답글 한 단계) · 수정/삭제 */
+.cthread { display: flex; flex-direction: column; gap: 4px; }
+.creply { margin-left: 16px; padding-left: 10px; border-left: 2px solid var(--line); }
+.comment { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 14px; }
+.comment b { margin-right: 0; }
+.comment .ctext { flex: 1 1 60%; min-width: 0; overflow-wrap: anywhere; }
+.comment.deleted { color: var(--sub); }
+.cactions { margin-left: auto; display: flex; gap: 10px; }
+.link { background: none; border: 0; padding: 0; color: var(--sub); font-size: 12px; cursor: pointer; }
+.link.danger { color: var(--bad); font-weight: 700; }
+.cform .c-cancel { padding-left: 6px; padding-right: 6px; }
+.cform.edit-form { flex: 1 1 100%; }

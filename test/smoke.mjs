@@ -56,4 +56,18 @@ const ids1 = new Set(pl.map(p => p.id));
 assert.equal((await call('placement', { answers: {} })).status, 200);
 const { items: pl2 } = (await call('placement')).data;
 assert.ok(pl2.length === 24 && pl2.every(p => !ids1.has(p.id)), '레벨 테스트를 다시 보면 지난번과 다른 문제가 나와야 함');
+// 일기 댓글: 달기 → 답글 → 수정 → 삭제(답글 있는 댓글은 자리만 남음)
+await call('diary', { text: 'Smoke test diary entry for comments.' });
+const d0 = (await call('diary')).data;
+const c1 = (await call('diary/comment', { uid: ID, date: d0.today, text: 'first' })).data.comments.at(-1);
+const r1 = (await call('diary/comment', { uid: ID, date: d0.today, text: 'reply', parent: c1.id })).data.comments.at(-1);
+assert.equal(r1.parent, c1.id, '답글의 parent');
+assert.equal((await call('diary/comment', { uid: ID, date: d0.today, text: 'x', parent: r1.id })).status, 400, '답글에 답글은 안 됨');
+const ed = (await call('diary/comment/edit', { uid: ID, date: d0.today, id: c1.id, text: 'first (edited)' })).data.comments.find(c => c.id === c1.id);
+assert.ok(ed.text === 'first (edited)' && ed.editedAt, '댓글 수정');
+const del = (await call('diary/comment/delete', { uid: ID, date: d0.today, id: c1.id })).data.comments;
+assert.ok(del.find(c => c.id === c1.id)?.deleted && del.some(c => c.id === r1.id), '답글 있는 댓글은 자리만 남고 답글은 유지');
+const del2 = (await call('diary/comment/delete', { uid: ID, date: d0.today, id: r1.id })).data.comments;
+assert.ok(!del2.some(c => c.id === r1.id), '답글 삭제');
+assert.ok((await call('board')).data.users.find(x => x.id === ID).diaryToday === true, '친구 화면용 오늘 일기 여부');
 console.log('smoke ok');

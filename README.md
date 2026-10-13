@@ -106,6 +106,29 @@ npm run deploy
 
 첫 로그인 후 설정에서 비밀번호를 바꾸세요.
 
+## 앱으로 쓰기 (홈 화면 앱 · 갤럭시 APK)
+
+웹 사이트와 별도로 **앱용 사이트**를 두 번째 Worker(`--env app`)로 배포합니다. `app/build.mjs`가 `public/`을 그대로 복사한 뒤 매니페스트·서비스 워커·아이콘만 얹으므로(`dist-app/`), 웹 사이트 쪽 파일은 바뀌지 않습니다. 데이터(D1)와 계정(`USERS` secret)은 두 Worker가 공유합니다.
+
+```bash
+npx wrangler secret put USERS --env app
+npm run deploy:app
+```
+
+- **아이폰**: Safari에서 앱 사이트를 열고 공유 → **홈 화면에 추가**. (설치 파일 배포는 Apple 정책상 개발자 계정·TestFlight 없이는 불가)
+- **갤럭시/안드로이드**: Google Bubblewrap(TWA)으로 APK를 만듭니다. `android/twa-manifest.json`의 `host`를 앱 사이트 도메인으로, 서명 키 지문을 `app/.well-known/assetlinks.json`에 넣으면 주소창 없이 전체 화면으로 열립니다.
+
+```bash
+# 최초 1회: JDK 17 + Android cmdline-tools를 ~/.bubblewrap 에 두고 config.json에 경로 지정, 서명 키 생성
+keytool -genkeypair -alias android -keyalg RSA -keysize 2048 -validity 10000 -keystore android/android.keystore
+# 프로젝트 생성 → 빌드 → 서명
+cd android && npx @bubblewrap/cli update --skipVersionUpgrade
+./gradlew.bat assembleRelease            # app/build/outputs/apk/release/app-release-unsigned.apk
+zipalign -f -p 4 <unsigned.apk> aligned.apk && apksigner sign --ks android.keystore --ks-key-alias android --out vocaday.apk aligned.apk
+```
+
+`android/`(서명 키 포함)는 git에 올라가지 않습니다. 서명 키와 비밀번호를 잃으면 같은 앱으로 업데이트할 수 없으니 따로 보관하세요.
+
 ## 문항 품질을 지키는 방법
 
 - `npm test` — 단어 779 · 문법 340 · 레벨 테스트 72 · 고정 오답 후보 4,674개를 실제 채점 코드로 전부 풀어 봅니다: 정답·대체 정답·약형(I'm/I am)·음성 입력·아포스트로피 없는 입력, 빈칸 자리표시에 정답 노출, 보기 뜻 겹침, 하루치 패턴 분산, 레벨 판정 규칙.

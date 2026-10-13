@@ -183,7 +183,7 @@ function friendMini(f, together) {
   <a class="card friend-mini" href="#/friends">
     <div class="avatar">${esc(f.name.slice(0, 1))}</div>
     <div class="grow"><b>${esc(f.name)}</b> <span class="sub">🔥 ${f.streak}일</span>
-      <div class="row">단어 ${s('word')} 문법 ${s('grammar')}</div></div>
+      <div class="row">단어 ${s('word')} 문법 ${s('grammar')} 일기 ${f.diaryToday ? '<span class="pill ok">완료</span>' : '<span class="pill off">아직</span>'}</div></div>
     <div class="together"><b>${together}</b><span>함께 연속</span></div>
   </a>`;
 }
@@ -590,7 +590,7 @@ async function friends() {
           <div class="grow"><b>${esc(u.name)}</b>${u.id === me ? ' <span class="chip">나</span>' : ''}<p class="sub">${LEVELS[u.level][0]} · ${PLAN_NAMES[u.plan]}</p></div>
           <div class="streak ${u.streak ? 'on' : ''}"><b>🔥</b>${u.streak}<small>일</small></div>
         </div>
-        <div class="row today-row"><span>오늘 단어 ${status(u, 'word')}</span><span>문법 ${status(u, 'grammar')}</span></div>
+        <div class="row today-row"><span>오늘 단어 ${status(u, 'word')}</span><span>문법 ${status(u, 'grammar')}</span><span>일기 ${u.diaryToday ? '<span class="pill ok">완료</span>' : '<span class="pill off">아직</span>'}</span></div>
         <div class="stats">${stat(u.learned, '학습')}${stat(u.mastered, '암기')}${stat(u.wrongNote, '오답')}${stat(u.accuracy7 == null ? '–' : u.accuracy7 + '%', '7일 정답률')}</div>
         ${heat(u.history)}
       </div>`,
@@ -842,13 +842,13 @@ async function diary(date) {
       <div class="ehead"><div class="avatar">${esc(me.name[0])}</div><b>${esc(me.name)}</b>${isToday ? '' : '<span class="sub">지난 일기는 읽기만 돼요</span>'}<span class="sub" id="when">${me.updatedAt ? hm(me.updatedAt) : ''}</span></div>
       <div id="mine"></div>
       <div id="review"></div>
-      ${comments(me, d.date)}
+      ${comments(me, d.me)}
     </div>
     ${others
       .map(
         o => `<div class="card entry">
       <div class="ehead"><div class="avatar">${esc(o.name[0])}</div><b>${esc(o.name)}</b>${o.updatedAt ? `<span class="sub">${hm(o.updatedAt)}</span>` : ''}</div>
-      ${o.text ? `<p class="entry-text">${esc(o.text)}</p>${comments(o, d.date)}` : `<p class="sub">아직 ${isToday ? '오늘 ' : ''}일기를 안 썼어요</p>`}
+      ${o.text ? `<p class="entry-text">${esc(o.text)}</p>${comments(o, d.me)}` : `<p class="sub">아직 ${isToday ? '오늘 ' : ''}일기를 안 썼어요</p>`}
     </div>`,
       )
       .join('')}
@@ -863,6 +863,59 @@ async function diary(date) {
       await api('diary/comment', { uid: f.dataset.uid, date: d.date, text: input.value });
       diary(date);
     };
+  });
+  // 답글 · 내 댓글 수정 · 삭제(두 번 눌러 확정)
+  document.querySelectorAll('.comments').forEach(box => {
+    box.addEventListener('click', async ev => {
+      const b = ev.target.closest('button.link');
+      if (!b) return;
+      const c = b.closest('.comment');
+      const id = c.dataset.id;
+      const uid = box.dataset.uid;
+      const form = (cls, placeholder, value = '') => {
+        const f = document.createElement('form');
+        f.className = 'cform ' + cls;
+        f.innerHTML = `<input maxlength="300" aria-label="${placeholder}" placeholder="${placeholder}"><button class="btn ghost">등록</button><button type="button" class="btn ghost c-cancel">취소</button>`;
+        f.querySelector('input').value = value;
+        f.querySelector('.c-cancel').onclick = () => diary(date);
+        return f;
+      };
+      try {
+        if (b.classList.contains('c-reply')) {
+          if (c.nextElementSibling?.classList.contains('reply-form')) return;
+          const f = form('reply-form', '답글 달기');
+          c.after(f);
+          f.querySelector('input').focus();
+          f.onsubmit = async e2 => {
+            e2.preventDefault();
+            const t = f.querySelector('input').value.trim();
+            if (t) await api('diary/comment', { uid, date: d.date, text: t, parent: id }).then(() => diary(date));
+          };
+        } else if (b.classList.contains('c-edit')) {
+          const span = c.querySelector('.ctext');
+          const f = form('edit-form', '댓글 수정', span.textContent);
+          span.replaceWith(f);
+          c.querySelector('.cactions').remove();
+          f.querySelector('input').focus();
+          f.onsubmit = async e2 => {
+            e2.preventDefault();
+            const t = f.querySelector('input').value.trim();
+            if (t) await api('diary/comment/edit', { uid, date: d.date, id, text: t }).then(() => diary(date));
+          };
+        } else if (b.classList.contains('c-del')) {
+          if (!b.dataset.armed) {
+            b.dataset.armed = '1';
+            b.textContent = '정말 삭제';
+            b.classList.add('danger');
+            return;
+          }
+          await api('diary/comment/delete', { uid, date: d.date, id });
+          diary(date);
+        }
+      } catch (e3) {
+        $('#msg') ? ($('#msg').textContent = e3.message) : console.warn(e3.message);
+      }
+    });
   });
 
   // 내 일기: 저장된 글은 게시글처럼 보이고 '수정'을 눌러야 입력창이 열린다.
@@ -943,11 +996,20 @@ async function diary(date) {
   render(text ? 'post' : 'edit');
 }
 
-function comments(e, date) {
+// 댓글: 댓글 → 답글 한 단계. 내 댓글은 수정·삭제 가능
+function comments(e, me) {
   if (!e.text) return '';
-  return `<div class="comments">${e.comments
-    .map(c => `<p class="comment"><b>${esc(c.name)}</b> ${esc(c.text)}</p>`)
-    .join('')}<form class="cform" data-uid="${e.uid}"><input placeholder="댓글 달기" maxlength="300" aria-label="댓글"><button class="btn ghost">등록</button></form></div>`;
+  const cs = e.comments;
+  const one = c =>
+    c.deleted
+      ? `<div class="comment deleted" data-id="${c.id}"><i>삭제된 댓글이에요</i></div>`
+      : `<div class="comment" data-id="${c.id}"><b>${esc(c.name)}</b><span class="ctext">${esc(c.text)}</span>${c.editedAt ? '<small class="sub">(수정됨)</small>' : ''}
+        <span class="cactions">${!c.parent ? '<button type="button" class="link c-reply">답글</button>' : ''}${c.by === me ? '<button type="button" class="link c-edit">수정</button><button type="button" class="link c-del">삭제</button>' : ''}</span></div>`;
+  const thread = cs
+    .filter(c => !c.parent)
+    .map(c => `<div class="cthread">${one(c)}${cs.filter(r => r.parent === c.id).map(r => `<div class="creply">${one(r)}</div>`).join('')}</div>`)
+    .join('');
+  return `<div class="comments" data-uid="${e.uid}">${thread}<form class="cform" data-uid="${e.uid}"><input placeholder="댓글 달기" maxlength="300" aria-label="댓글"><button class="btn ghost">등록</button></form></div>`;
 }
 
 addEventListener('hashchange', route);
