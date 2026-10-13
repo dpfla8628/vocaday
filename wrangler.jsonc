@@ -1,0 +1,10 @@
+{
+  "name": "vocaday",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "ai": { "binding": "AI" }, // 일기 첨삭(Workers AI 무료 한도)
+  "d1_databases": [
+    { "binding": "DB", "database_name": "vocaday", "database_id": "4a37db6b-87e2-4ac5-a438-075e7af046b1" }
+  ]
+}
