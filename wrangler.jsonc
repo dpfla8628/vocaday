@@ -3,6 +3,7 @@
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
   "observability": { "enabled": true }, // 대시보드 Workers Logs(요청·console.log 기록)
+  "vars": { "VAPID_PUBLIC_KEY": "BP_mhN4QeT_q8nS2T8ZaNMK9IHCY_Fe75euJdZB5cQ5wE2fAeErHPKbi2S3sNLr-nG9ZDtZ6bQmcdGH-MK7qQVY", "VAPID_SUBJECT": "https://github.com/dpfla8628/vocaday" }, // 푸시 알림(개인키는 secret VAPID_PRIVATE_JWK)
   "assets": { "directory": "./public", "binding": "ASSETS" },
   "ai": { "binding": "AI" }, // 일기 첨삭(Workers AI 무료 한도)
   "d1_databases": [
@@ -13,6 +14,8 @@
     "app": {
       "name": "vocaday-app",
       "observability": { "enabled": true },
+      "vars": { "VAPID_PUBLIC_KEY": "BP_mhN4QeT_q8nS2T8ZaNMK9IHCY_Fe75euJdZB5cQ5wE2fAeErHPKbi2S3sNLr-nG9ZDtZ6bQmcdGH-MK7qQVY", "VAPID_SUBJECT": "https://github.com/dpfla8628/vocaday" },
+      "triggers": { "crons": ["0 11 * * *"] }, // 매일 20:00 KST 미션 리마인더
       "assets": { "directory": "./dist-app", "binding": "ASSETS" },
       "ai": { "binding": "AI" },
       "d1_databases": [

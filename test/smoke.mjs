@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 // 계정은 .dev.vars의 USERS(JSON)에서 읽는다 — 저장소에 아이디·비밀번호를 두지 않는다
 const USERS = JSON.parse(/^USERS=(.*)$/m.exec(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8'))[1]);
-const [[ID, { pw: PW }], [ID2]] = Object.entries(USERS);
+const [[ID, { pw: PW }], [ID2, { pw: PW2 }]] = Object.entries(USERS);
 
 const BASE = process.argv[2] || 'http://localhost:8787';
 let cookie = '';
@@ -70,4 +70,19 @@ assert.ok(del.find(c => c.id === c1.id)?.deleted && del.some(c => c.id === r1.id
 const del2 = (await call('diary/comment/delete', { uid: ID, date: d0.today, id: r1.id })).data.comments;
 assert.ok(!del2.some(c => c.id === r1.id), '답글 삭제');
 assert.ok((await call('board')).data.users.find(x => x.id === ID).diaryToday === true, '친구 화면용 오늘 일기 여부');
+
+// 푸시 알림: 구독 저장 → 친구가 댓글을 달면 알림이 쌓이고, 서비스 워커가 push/next 로 하나씩 가져간다
+assert.ok((await call('push/key')).data.key.length > 60, 'VAPID 공개키가 없음');
+const fake = { endpoint: 'https://example.invalid/push/' + Date.now(), keys: { p256dh: 'x', auth: 'y' } };
+assert.equal((await call('push/subscribe', { subscription: fake })).data.ok, true);
+while ((await call('push/next')).data.title); // 남아 있던 알림 비우기
+cookie = '';
+assert.equal((await call('login', { id: ID2, pw: PW2 })).status, 200);
+await call('diary/comment', { uid: ID, date: d0.today, text: 'notify me' });
+cookie = '';
+assert.equal((await call('login', { id: ID, pw: PW })).status, 200);
+const n = (await call('push/next')).data;
+assert.ok(n.title?.includes('댓글') && n.body === 'notify me', `댓글 알림이 없음: ${JSON.stringify(n)}`);
+assert.deepEqual((await call('push/next')).data, {}, '알림은 한 번만 전달');
+assert.equal((await call('push/unsubscribe', { endpoint: fake.endpoint })).data.devices, 0);
 console.log('smoke ok');

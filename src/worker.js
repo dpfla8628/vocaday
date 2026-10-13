@@ -13,6 +13,10 @@ import { makePicker } from './distractors.js';
 import { placeLevel, PASS } from './placement.js';
 import { freshOrder } from './queue.js';
 import { MAX_LEN, promptOf, checkDiary } from './diary.js';
+import { notify, nextNotice, subscriptions, saveSubscriptions } from './push.js';
+
+const KIND_KO = { word: '단어', grammar: '문법' };
+const others = uid => Object.keys(USERS).filter(x => x !== uid);
 
 const WORDS = [...w1, ...w2, ...w3, ...w4].map(x => ({ ...x, kind: 'word' }));
 const GRAMMAR = [...g12, ...g34].map(x => ({ ...x, kind: 'grammar' }));
@@ -331,11 +335,37 @@ async function api(req, env, url) {
       await saveUser();
       return json(r);
     }
-    case 'POST /api/finish':
+    case 'POST /api/finish': {
       if (!BANK[body.kind]) throw err(400, 'bad kind');
-      dayOf(u, today())[body.kind].done = true;
+      const day = dayOf(u, today())[body.kind];
+      const first = !day.done;
+      day.done = true;
       await saveUser();
+      // 처음 끝냈을 때만 친구에게 알림
+      if (first) for (const o of others(u.id)) await notify(env, o, { title: `🔥 ${nameOf(u.id)}님이 오늘 ${KIND_KO[body.kind]} 미션을 끝냈어요`, body: '나도 오늘 미션 하러 가기', url: '/#/home' });
       return json(stats(u));
+    }
+    // ---------- 푸시 알림 ----------
+    case 'GET /api/push/key':
+      return json({ key: env.VAPID_PUBLIC_KEY || '' });
+    case 'POST /api/push/subscribe': {
+      const s = body.subscription;
+      if (!s?.endpoint?.startsWith('https://') || !s.keys?.p256dh || !s.keys?.auth) throw err(400, 'bad subscription');
+      const subs = (await subscriptions(env, u.id)).filter(x => x.endpoint !== s.endpoint);
+      subs.push({ endpoint: s.endpoint, keys: s.keys, at: Date.now(), ua: (req.headers.get('User-Agent') || '').slice(0, 80) });
+      await saveSubscriptions(env, u.id, subs.slice(-5)); // 기기 5개까지
+      return json({ ok: true, devices: Math.min(subs.length, 5) });
+    }
+    case 'POST /api/push/unsubscribe': {
+      const subs = (await subscriptions(env, u.id)).filter(x => x.endpoint !== String(body.endpoint || ''));
+      await saveSubscriptions(env, u.id, subs);
+      return json({ ok: true, devices: subs.length });
+    }
+    case 'GET /api/push/next': // 서비스 워커가 푸시를 받으면 여기서 알림 내용을 가져간다
+      return json((await nextNotice(env, u.id)) ?? {});
+    case 'POST /api/push/test':
+      await notify(env, u.id, { title: '🔔 알림 테스트', body: '알림이 잘 와요! 댓글·친구 미션 완료·저녁 8시 리마인더를 받아요.', url: '/#/settings' });
+      return json({ ok: true });
     case 'GET /api/board': {
       const { results } = await env.DB.prepare("SELECT v FROM kv WHERE k LIKE 'user:%'").all();
       const users = results.map(r => JSON.parse(r.v));
@@ -368,10 +398,12 @@ async function api(req, env, url) {
       if (text.length > MAX_LEN) throw err(400, `${MAX_LEN}자 이내로 써 주세요`);
       const k = `diary:${u.id}:${today()}`;
       const e = (await get(env, k)) ?? { uid: u.id, date: today(), text: '', review: null, comments: [] };
+      const firstToday = !e.text;
       if (e.text !== text) e.review = null; // 고쳐 쓰면 이전 첨삭은 버린다(복습 문제는 첨삭 때 이미 만들어짐)
       e.text = text;
       e.updatedAt = Date.now();
       await put(env, k, e);
+      if (firstToday) for (const o of others(u.id)) await notify(env, o, { title: `📔 ${nameOf(u.id)}님이 오늘 일기를 썼어요`, body: text.slice(0, 80), url: '/#/diary' });
       return json({});
     }
     case 'POST /api/diary/check': {
@@ -414,6 +446,12 @@ async function api(req, env, url) {
       if (parent && !e.comments.some(c => c.id === parent && !c.parent)) throw err(400, '답글을 달 댓글이 없어요');
       e.comments.push({ id: randomHex(6), by: u.id, name: nameOf(u.id), text, at: Date.now(), ...(parent ? { parent } : {}) });
       await put(env, k, e);
+      // 일기 주인과(답글이면) 원댓글 작성자에게 알림 — 내가 나에게는 X
+      const targets = new Set();
+      if (owner !== u.id) targets.add(owner);
+      const pc = parent && e.comments.find(c => c.id === parent);
+      if (pc && pc.by !== u.id) targets.add(pc.by);
+      for (const t of targets) await notify(env, t, { title: `💬 ${nameOf(u.id)}님의 ${parent ? '답글' : '댓글'}`, body: text.slice(0, 80), url: `/#/diary/${date}` });
       return json({ comments: e.comments });
     }
     case 'POST /api/diary/comment/edit':
@@ -454,6 +492,19 @@ async function api(req, env, url) {
 }
 
 export default {
+  // 저녁 리마인더(Cron, wrangler.jsonc env.app의 triggers): 그날 미션을 안 끝낸 사람에게만
+  async scheduled(event, env) {
+    USERS = parseUsers(env);
+    await init(env);
+    const t = today();
+    for (const uid of Object.keys(USERS)) {
+      const x = await get(env, 'user:' + uid);
+      if (!x) continue;
+      const left = ['word', 'grammar'].filter(k => !x.days?.[t]?.[k]?.done);
+      if (!left.length || !(await subscriptions(env, uid)).length) continue;
+      await notify(env, uid, { title: '⏰ 오늘 미션이 아직이에요', body: `${left.map(k => KIND_KO[k]).join('·')} 미션을 끝내고 연속 기록을 지켜요`, url: '/#/home' });
+    }
+  },
   async fetch(req, env) {
     USERS = parseUsers(env);
     const url = new URL(req.url);

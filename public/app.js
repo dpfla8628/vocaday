@@ -621,6 +621,9 @@ async function settings() {
     <p class="ok-msg" id="saved" role="status"></p>
     <h2 class="section">비밀번호 변경</h2>
     <form class="card" id="pwf"><label>새 비밀번호<input type="password" name="pw" minlength="4" autocomplete="new-password" required></label><button class="btn">변경</button><p class="sub" id="pwmsg" role="status"></p></form>
+    <h2 class="section">알림</h2>
+    <div class="card"><p class="sub" id="pushMsg">확인 중…</p>
+      <div class="actions"><button class="btn primary" id="pushOn" hidden>🔔 알림 켜기</button><button class="btn ghost" id="pushOff" hidden>알림 끄기</button><button class="btn ghost" id="pushTest" hidden>테스트 알림</button></div></div>
     <a class="btn big" href="#/placement">레벨 테스트 다시 보기</a>
     <button class="btn ghost big" id="logout">로그아웃</button>
   </section>
@@ -652,6 +655,53 @@ async function settings() {
     await api('logout', {});
     go('#/login');
   };
+
+  // 푸시 알림: 서비스 워커가 있는 앱 사이트(홈 화면 앱·갤럭시 앱)에서만 켤 수 있다
+  const pushUI = async () => {
+    const msg = $('#pushMsg');
+    const [on, off, test] = ['#pushOn', '#pushOff', '#pushTest'].map(s => $(s));
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration().catch(() => null) : null;
+    const ios = /iPhone|iPad/.test(navigator.userAgent);
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (!reg || !('PushManager' in window) || !('Notification' in window)) {
+      msg.textContent = ios && !standalone ? '아이폰은 Safari 공유 → 홈 화면에 추가한 뒤, 그 앱에서 알림을 켤 수 있어요.' : '알림은 앱(홈 화면 앱 또는 갤럭시 앱)에서 켤 수 있어요.';
+      return;
+    }
+    const sub = await reg.pushManager.getSubscription();
+    const granted = Notification.permission === 'granted' && !!sub;
+    msg.textContent = granted
+      ? '이 기기로 알림을 받아요: 댓글·답글, 친구의 미션 완료, 저녁 8시 미션 리마인더'
+      : Notification.permission === 'denied'
+        ? '알림이 차단돼 있어요. 기기 설정에서 이 앱의 알림을 허용해 주세요.'
+        : '댓글·답글, 친구의 미션 완료, 저녁 8시 미션 리마인더를 받아요.';
+    on.hidden = granted || Notification.permission === 'denied';
+    off.hidden = !granted;
+    test.hidden = !granted;
+    on.onclick = async () => {
+      try {
+        if ((await Notification.requestPermission()) !== 'granted') return pushUI();
+        const { key } = await api('push/key');
+        const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        await api('push/subscribe', { subscription: s.toJSON() });
+        pushUI();
+      } catch (e) {
+        msg.textContent = '알림을 켜지 못했어요: ' + e.message;
+      }
+    };
+    off.onclick = async () => {
+      const s = await reg.pushManager.getSubscription();
+      if (s) {
+        await api('push/unsubscribe', { endpoint: s.endpoint });
+        await s.unsubscribe();
+      }
+      pushUI();
+    };
+    test.onclick = async () => {
+      await api('push/test', {});
+      msg.textContent = '테스트 알림을 보냈어요. 잠시 뒤 알림이 와요.';
+    };
+  };
+  pushUI();
 }
 
 // ---------- 레벨 테스트 ----------
