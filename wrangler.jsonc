@@ -2,6 +2,7 @@
   "name": "vocaday",
   "main": "src/worker.js",
   "compatibility_date": "2025-09-01",
+  "observability": { "enabled": true }, // 대시보드 Workers Logs(요청·console.log 기록)
   "assets": { "directory": "./public", "binding": "ASSETS" },
   "ai": { "binding": "AI" }, // 일기 첨삭(Workers AI 무료 한도)
   "d1_databases": [
@@ -11,6 +12,7 @@
   "env": {
     "app": {
       "name": "vocaday-app",
+      "observability": { "enabled": true },
       "assets": { "directory": "./dist-app", "binding": "ASSETS" },
       "ai": { "binding": "AI" },
       "d1_databases": [

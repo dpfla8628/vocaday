@@ -234,10 +234,13 @@ async function api(req, env, url) {
   const secure = url.protocol === 'https:' ? '; Secure' : '';
 
   if (route === 'POST /api/login') {
-    const u = await get(env, 'user:' + String(body.id || '').trim().toLowerCase());
+    const id = String(body.id || '').trim().toLowerCase();
+    const u = await get(env, 'user:' + id);
     const ok =
       u &&
       crypto.subtle.timingSafeEqual(new TextEncoder().encode(await hashPw(String(body.pw || ''), u.salt)), new TextEncoder().encode(u.hash));
+    // Cloudflare 대시보드(Workers Logs)에서 누가 언제 로그인했는지 보려고 남긴다. 비밀번호는 절대 기록하지 않는다.
+    console.log(`login ${ok ? 'ok' : 'fail'} id=${id.slice(0, 40)}`);
     if (!ok) throw err(401, '아이디 또는 비밀번호가 틀렸어요');
     const sid = randomHex(24);
     await put(env, 'sid:' + sid, u.id);
