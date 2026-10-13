@@ -880,7 +880,7 @@ async function diary(date) {
     if (mode === 'post') {
       box.innerHTML = `<p class="entry-text">${esc(text)}</p>
         <div class="row between"><span></span><span class="small" id="msg" role="status"></span></div>
-        <div class="actions"><button class="btn" id="edit">✏️ 수정</button>${checkBtn}</div>`;
+        <div class="actions"><button class="btn" id="edit">✏️ 수정</button></div>`; // 완료된 글에는 '수정'만. 첨삭 받기는 입력창이 열렸을 때만
       $('#edit').onclick = () => render('edit');
     } else {
       const v = draft ?? text;
@@ -894,8 +894,8 @@ async function diary(date) {
         draft = null;
         render('post');
       });
+      $('#check').onclick = check;
     }
-    $('#check').onclick = check;
   };
   const showReview = r => {
     $('#review').innerHTML = r ? reviewView(text, r) : '';
