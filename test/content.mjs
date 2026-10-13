@@ -236,6 +236,19 @@ const { freshOrder } = await import('../src/queue.js');
   if (freshOrder(WORDS, 1).slice(0, 15).some(x => x.lv !== 1)) fail('freshOrder', '단어도 내 레벨부터 나와야 함');
 }
 
+// ---------- 형태 안내(표제어와 다른 빈칸 정답) ----------
+const { formName } = await import('../public/grade.js');
+for (const [a, e, want] of [
+  ['participated', 'participate', '과거형·과거분사'],
+  ['went', 'go', '과거형·과거분사'],
+  ['running', 'run', '진행형·동명사(-ing)'],
+  ['apples', 'apple', '복수형 또는 3인칭 단수(-s)'],
+  ['took part in', 'take part in', '과거형·과거분사'],
+  ['apple', 'apple', ''],
+  ['children', 'child', '다른 형태'],
+])
+  if (formName(a, e) !== want) fail('formName', `${a}/${e}: "${formName(a, e)}" ≠ "${want}"`);
+
 // ---------- 블라인드 답안(선택) ----------
 const blind = process.argv[2];
 if (blind) {

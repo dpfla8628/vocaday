@@ -1,5 +1,5 @@
 // 보카데이 프론트엔드 — 프레임워크 없이 해시 라우팅 + 템플릿 문자열
-import { plain, blankParts, norm, grade, fromSpeech, maskAnswer } from './grade.js';
+import { plain, blankParts, norm, grade, fromSpeech, maskAnswer, formName } from './grade.js';
 const $ = s => document.querySelector(s);
 const app = $('#app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -18,6 +18,7 @@ const pref = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
 }; // 기기별 취향(문법 풀이 방식) 기억
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition; // 음성 인식(크롬·엣지·사파리)
+const josa = (w, a, b) => { const c = w.charCodeAt(w.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? a : b; }; // 받침 유무로 이/가
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
@@ -418,18 +419,26 @@ async function quiz(kind, mode) {
       if (input.disabled) return;
       if (!input.value.trim()) return input.focus();
       const g = grade(input.value, [ans, ...(it.alt || [])]);
-      // 다른 실제 단어·같은 뜻 표현(near)을 쓴 경우 한 번은 오답 대신 첫 글자 힌트와 함께 다시 기회
+      // 한 번은 오답 대신 다시 기회: ① 표제어 그대로 썼는데 문장은 다른 형태가 필요 ② 빈칸 단어 수가 다름(앞뒤 말까지 씀) ③ 다른 실제 단어·같은 뜻 표현
       const typed = norm(input.value);
-      if (g === 'bad' && !retried && (known.has(typed) || (it.near || []).some(n => norm(n) === typed))) {
-        retried = true;
+      if (g !== 'ok' && !retried) {
+        const core = kind === 'word' ? norm(it.en) : norm(ans);
+        const ansWords = ans.split(' ').length;
+        const after = blankParts(src)[2].trim().split(' ')[0];
         // 긴 단어는 비슷한 동의어와 갈리도록 앞 3글자까지 보여 준다
         const first = '힌트: ' + ans.split(' ').map(w => { const n = w.length >= 8 ? 3 : 1; return w.slice(0, n) + '·'.repeat(w.length - n); }).join(' ');
-        $('#hint').textContent =
-          typed === norm(it.en || '')
-            ? '단어는 맞았어요! 문장에 맞게 형태(시제·복수 등)를 바꿔 보세요.'
-            : `말이 되는 표현이지만, 지금 연습하는 단어는 따로 있어요. ${first}`;
-        input.select();
-        return;
+        let hint = '';
+        if (kind === 'word' && typed === core && norm(ans) !== core)
+          hint = `단어는 맞았어요! 이 문장에는 ${formName(ans, it.en)}${josa(formName(ans, it.en), '이', '가')} 들어가요(${ans.replace(/ /g, '').length}글자). 문장의 시제·수를 보고 형태를 바꿔 보세요.`;
+        else if (typed.split(' ').length !== ansWords && (typed.includes(core) || typed.includes(norm(ans))))
+          hint = `빈칸에는 ${ansWords}단어만 들어가요. 앞뒤에 이미 있는 말${after ? `('${after}' 등)` : ''}은 빼고 써 보세요.`;
+        else if (g === 'bad' && (known.has(typed) || (it.near || []).some(n => norm(n) === typed))) hint = `말이 되는 표현이지만, 지금 연습하는 단어는 따로 있어요. ${first}`;
+        if (hint) {
+          retried = true;
+          $('#hint').textContent = hint;
+          input.select();
+          return;
+        }
       }
       input.disabled = true;
       input.classList.add(g === 'ok' ? 'right' : 'wrong');
@@ -471,14 +480,27 @@ async function quiz(kind, mode) {
     }
     beep(ok);
     const full = plain(kind === 'word' ? it.ex : it.s);
-    const title = { ok: '정답이에요!', close: '아깝다! 철자를 확인해요', bad: '아쉬워요', reveal: '정답을 확인해요' }[g];
+    const ans = blankParts(kind === 'word' ? it.ex : it.s)[1];
+    // 단어는 맞는데 문장에 맞는 형태(과거형 등)가 아닌 경우는 철자 실수와 다르게 안내한다
+    const form = kind === 'word' ? formName(ans, it.en) : '';
+    const formMiss = !ok && form && typed && norm(typed) === norm(it.en);
+    const title = {
+      ok: '정답이에요!',
+      close: formMiss ? '단어는 맞는데, 형태가 달라요' : '거의 맞았어요! 한 글자 차이예요',
+      bad: formMiss ? '단어는 맞는데, 형태가 달라요' : '아쉬워요',
+      reveal: '정답을 확인해요',
+    }[g];
+    const posTag = it.pos ? `<i>${esc(POS[it.pos] || it.pos)}</i>` : '';
+    const wordAns = form
+      ? `<p class="ans">정답: <b>${esc(ans)}</b> <span class="gloss">${esc(it.en)}의 ${esc(form)}</span></p><p class="ans"><b>${esc(it.en)}</b> ${posTag} ${esc(it.ko)}</p>`
+      : `<p class="ans">정답: <b>${esc(it.en)}</b> ${posTag} ${esc(it.ko)}</p>`;
     const sheet = $('#sheet');
     sheet.className = 'sheet show ' + (ok ? 'ok' : 'bad');
     sheet.innerHTML = `
       <div class="sheet-in">
         <h3>${ok ? '✓' : '✕'} ${title}</h3>
-        ${kind === 'word' ? `<p class="ans"><b>${esc(it.en)}</b> ${it.pos ? `<i>${esc(POS[it.pos] || it.pos)}</i>` : ''} ${esc(it.ko)}</p>` : `<p class="ans">정답: <b>${esc(blankParts(it.s)[1])}</b></p>`}
-        ${(g === 'close' || g === 'bad') && typed ? `<p class="small">내 답: <s>${esc(typed)}</s></p>` : ''}
+        ${kind === 'word' ? wordAns : `<p class="ans">정답: <b>${esc(ans)}</b></p>`}
+        ${(g === 'close' || g === 'bad') && typed ? `<p class="small">내 답: <s>${esc(typed)}</s>${formMiss ? ` → 이 문장에서는 <b>${esc(ans)}</b>(${esc(form)})${josa(ans, '이', '가')} 들어가요.` : ''}</p>` : ''}
         <p class="full"><button class="iconbtn" id="sayFull" aria-label="문장 듣기">${icon('speaker', 18)}</button>${esc(full)}</p>
         ${it.tip ? `<p class="tip">💡 ${esc(it.tip)}</p>` : ''}
         ${ok ? '' : '<p class="small">이 문제는 잠시 뒤에 한 번 더, 그리고 내일 다시 나와요.</p>'}
@@ -660,45 +682,72 @@ async function settings() {
   const pushUI = async () => {
     const msg = $('#pushMsg');
     const [on, off, test] = ['#pushOn', '#pushOff', '#pushTest'].map(s => $(s));
-    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration().catch(() => null) : null;
+    [on, off, test].forEach(b => (b.hidden = true));
     const ios = /iPhone|iPad/.test(navigator.userAgent);
     const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    // 서비스 워커가 아직 준비 중일 수 있으니 잠깐(3초) 기다린다. 웹 사이트(서비스 워커 없음)에서는 null
+    const reg =
+      'serviceWorker' in navigator
+        ? await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 3000))]).catch(() => null)
+        : null;
     if (!reg || !('PushManager' in window) || !('Notification' in window)) {
-      msg.textContent = ios && !standalone ? '아이폰은 Safari 공유 → 홈 화면에 추가한 뒤, 그 앱에서 알림을 켤 수 있어요.' : '알림은 앱(홈 화면 앱 또는 갤럭시 앱)에서 켤 수 있어요.';
+      msg.textContent =
+        ios && !standalone
+          ? '아이폰: 앱 주소를 Safari로 연 뒤 공유 → 홈 화면에 추가하고, 홈 화면의 앱을 열어 여기서 켜 주세요. (iOS 16.4 이상)'
+          : ios
+            ? '이 홈 화면 앱은 알림을 지원하지 않는 주소로 추가됐어요. 앱 주소로 다시 추가해 주세요. (iOS 16.4 이상)'
+            : '알림은 앱(홈 화면 앱 또는 갤럭시 앱)에서 켤 수 있어요.';
       return;
     }
-    const sub = await reg.pushManager.getSubscription();
+    const keyP = api('push/key').catch(() => ({ key: '' })); // 탭 전에 미리 받아 둔다(iOS는 탭 직후에 구독해야 함)
+    const sub = await reg.pushManager.getSubscription().catch(() => null);
     const granted = Notification.permission === 'granted' && !!sub;
     msg.textContent = granted
       ? '이 기기로 알림을 받아요: 댓글·답글, 친구의 미션 완료, 저녁 8시 미션 리마인더'
       : Notification.permission === 'denied'
-        ? '알림이 차단돼 있어요. 기기 설정에서 이 앱의 알림을 허용해 주세요.'
+        ? '알림이 차단돼 있어요. 기기 설정 → 알림에서 이 앱을 허용한 뒤 다시 눌러 주세요.'
         : '댓글·답글, 친구의 미션 완료, 저녁 8시 미션 리마인더를 받아요.';
     on.hidden = granted || Notification.permission === 'denied';
     off.hidden = !granted;
     test.hidden = !granted;
     on.onclick = async () => {
+      msg.textContent = '알림 권한을 요청하는 중…';
       try {
-        if ((await Notification.requestPermission()) !== 'granted') return pushUI();
-        const { key } = await api('push/key');
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
+          msg.textContent = perm === 'denied' ? '알림이 차단됐어요. 기기 설정 → 알림에서 이 앱을 허용해 주세요.' : '알림 권한을 허용하지 않았어요.';
+          return;
+        }
+        const { key } = await keyP;
+        if (!key) throw new Error('서버 키를 받지 못했어요');
         const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
         await api('push/subscribe', { subscription: s.toJSON() });
         pushUI();
       } catch (e) {
-        msg.textContent = '알림을 켜지 못했어요: ' + e.message;
+        msg.textContent = '알림을 켜지 못했어요: ' + (e.message || e);
       }
     };
     off.onclick = async () => {
-      const s = await reg.pushManager.getSubscription();
-      if (s) {
-        await api('push/unsubscribe', { endpoint: s.endpoint });
-        await s.unsubscribe();
+      msg.textContent = '알림을 끄는 중…';
+      try {
+        const s = await reg.pushManager.getSubscription();
+        if (s) {
+          await api('push/unsubscribe', { endpoint: s.endpoint });
+          await s.unsubscribe();
+        }
+        pushUI();
+      } catch (e) {
+        msg.textContent = '알림을 끄지 못했어요: ' + (e.message || e);
       }
-      pushUI();
     };
     test.onclick = async () => {
-      await api('push/test', {});
-      msg.textContent = '테스트 알림을 보냈어요. 잠시 뒤 알림이 와요.';
+      msg.textContent = '테스트 알림을 보내는 중…';
+      try {
+        await api('push/test', {});
+        msg.textContent = '테스트 알림을 보냈어요. 잠시 뒤 알림이 와요(안 오면 기기 알림 설정을 확인해 주세요).';
+      } catch (e) {
+        msg.textContent = '보내지 못했어요: ' + (e.message || e);
+      }
     };
   };
   pushUI();

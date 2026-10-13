@@ -323,3 +323,6 @@ details summary { cursor: pointer; color: var(--primary); font-weight: 700; font
 .link.danger { color: var(--bad); font-weight: 700; }
 .cform .c-cancel { padding-left: 6px; padding-right: 6px; }
 .cform.edit-form { flex: 1 1 100%; }
+
+/* hidden 속성이 .btn 등의 display 규칙에 밀리지 않게 */
+[hidden] { display: none !important; }

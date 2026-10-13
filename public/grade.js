@@ -90,3 +90,17 @@ export function fromSpeech(transcripts, answers, before, after) {
 
 // 빈칸 자리표시: 글자 수만 점으로 보여 주고 정답 글자는 절대 노출하지 않는다
 export const maskAnswer = ans => ans.replace(/[^\s]/g, '·');
+
+// 빈칸 정답이 표제어와 다른 형태일 때 그 형태의 이름(안내용 추정). 같으면 빈 문자열
+const IRREG_PAST =
+  /^(went|ran|ate|saw|took|came|gave|made|got|had|was|were|did|said|bought|thought|felt|left|met|told|found|wrote|spoke|broke|drove|knew|grew|threw|drew|won|lost|hid|bit|chose|wore|woke|rode|flew|fell|kept|slept|sent|spent|built|lent|meant|dealt|lit|shot|struck|stuck|hung|dug|fed|bled|fled|brought|caught|taught|fought|sought|began|drank|sang|rang|became|shook|paid|laid|held|sold|stood|understood|tore|bore|froze|forgot|forgave|overcame|underwent|withdrew|misled|wound|bent|sank|shrank|stole|wove|clung|dove|swam|sat|led|gone|done|seen|eaten|taken|given|written|spoken|broken|driven|known|grown|thrown|drawn|chosen|worn|woken|ridden|flown|fallen|forgotten|hidden|bitten|begun|drunk|sung)$/;
+export function formName(ans, en) {
+  const a = norm(ans).split(' ')[0];
+  const e = norm(en).split(' ')[0]; // 구동사는 첫 단어(동사)로 판단
+  if (a === e) return '';
+  if (a.endsWith('ing')) return '진행형·동명사(-ing)';
+  if (a.endsWith('ed') || IRREG_PAST.test(a)) return '과거형·과거분사';
+  if (a.endsWith('s') && !e.endsWith('s')) return '복수형 또는 3인칭 단수(-s)';
+  if (a.endsWith('er') || a.endsWith('est')) return '비교급·최상급';
+  return '다른 형태';
+}
