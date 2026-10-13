@@ -6,5 +6,16 @@
   "ai": { "binding": "AI" }, // 일기 첨삭(Workers AI 무료 한도)
   "d1_databases": [
     { "binding": "DB", "database_name": "vocaday", "database_id": "4a37db6b-87e2-4ac5-a438-075e7af046b1" }
-  ]
+  ],
+  // 앱(홈 화면 앱·갤럭시 APK)용 별도 사이트. 데이터(D1)·계정은 같은 것을 공유한다. 배포: npm run deploy:app
+  "env": {
+    "app": {
+      "name": "vocaday-app",
+      "assets": { "directory": "./dist-app", "binding": "ASSETS" },
+      "ai": { "binding": "AI" },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "vocaday", "database_id": "4a37db6b-87e2-4ac5-a438-075e7af046b1" }
+      ]
+    }
+  }
 }

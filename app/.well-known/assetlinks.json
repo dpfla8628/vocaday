@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vocaday.twa",
+      "sha256_cert_fingerprints": ["2E:14:E5:64:E8:F4:0A:76:15:87:05:30:36:4D:FF:6F:55:FF:38:BE:42:D3:30:FA:EB:FB:AD:94:2F:D7:84:12"]
+    }
+  }
+]

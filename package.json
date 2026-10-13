@@ -5,7 +5,10 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "smoke": "node test/smoke.mjs",
-    "test": "node test/content.mjs"
+    "test": "node test/content.mjs",
+    "build:app": "node app/build.mjs",
+    "deploy:app": "node app/build.mjs && wrangler deploy --env app",
+    "icons": "node test/make-icons.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.149.0"

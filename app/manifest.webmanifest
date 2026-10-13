@@ -1,0 +1,17 @@
+{
+  "name": "보카데이",
+  "short_name": "보카데이",
+  "description": "매일 단어 하나, 문장 하나. 친구랑 같이 하는 영어 습관",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F5FA",
+  "theme_color": "#5B4CF5",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
