@@ -293,12 +293,6 @@ label input:focus { border-color: var(--primary); }
 .box h4 { margin: 0 0 6px; font-size: 13px; }
 .box p { margin: 4px 0; font-size: 15px; }
 details summary { cursor: pointer; color: var(--primary); font-weight: 700; font-size: 14px; }
-.comments { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
-.comment { margin: 0; font-size: 14px; }
-.comment b { margin-right: 6px; }
-.cform { display: flex; gap: 6px; }
-.cform input { flex: 1; border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 12px; font: inherit; font-size: 14px; outline: none; }
-.cform input:focus { border-color: var(--primary); }
 
 /* 레벨 테스트: 답을 고르면 빈칸에 정답을 채워 보여 준다 */
 .gap.ok { color: var(--ok-dark); border-color: var(--ok); }
@@ -311,18 +305,53 @@ details summary { cursor: pointer; color: var(--primary); font-weight: 700; font
 
 .diary-card.done .mtag { background: var(--ok-soft); color: var(--ok-dark); }
 
-/* 댓글 스레드(답글 한 단계) · 수정/삭제 */
-.cthread { display: flex; flex-direction: column; gap: 4px; }
-.creply { margin-left: 16px; padding-left: 10px; border-left: 2px solid var(--line); }
-.comment { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 14px; }
-.comment b { margin-right: 0; }
-.comment .ctext { flex: 1 1 60%; min-width: 0; overflow-wrap: anywhere; }
-.comment.deleted { color: var(--sub); }
-.cactions { margin-left: auto; display: flex; gap: 10px; }
-.link { background: none; border: 0; padding: 0; color: var(--sub); font-size: 12px; cursor: pointer; }
-.link.danger { color: var(--bad); font-weight: 700; }
-.cform .c-cancel { padding-left: 6px; padding-right: 6px; }
-.cform.edit-form { flex: 1 1 100%; }
 
 /* hidden 속성이 .btn 등의 display 규칙에 밀리지 않게 */
 [hidden] { display: none !important; }
+#pushMsg.loud { color: var(--primary); font-weight: 700; }
+
+/* 댓글: 머리(아바타·이름·시간) → 본문 → 글자 버튼. 넉넉한 간격, 답글은 부모 본문 줄(아바타 28 + 간격 10)에 맞춰 들여쓰기 */
+.comments { display: flex; flex-direction: column; gap: 18px; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+.chead { margin: 0; font-size: 14px; font-weight: 700; color: var(--sub); }
+.chead b { color: var(--primary); }
+.cthread { display: flex; flex-direction: column; gap: 14px; }
+.creply, .reply-form { padding-left: 38px; }
+.comment { display: flex; gap: 10px; align-items: flex-start; }
+.avatar.sm { width: 28px; height: 28px; font-size: 13px; }
+.creply .avatar.sm { width: 24px; height: 24px; font-size: 12px; }
+.comment.deleted .avatar { background: var(--line); color: var(--sub); }
+.cbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cmeta { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 12px; color: var(--sub); }
+.cmeta b { color: var(--text); font-size: 14px; }
+.comment.mine .cmeta b { color: var(--primary); }
+.ctext { margin: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment.deleted .ctext { color: var(--sub); font-size: 14px; padding-top: 3px; }
+/* 글자 버튼은 작게 보여도 누르는 자리는 넉넉하게(높이 32px) */
+.cactions { display: flex; margin: -4px 0 -6px -8px; }
+.cactions button { background: none; border: 0; padding: 0 8px; min-height: 32px; font-size: 13px; font-weight: 600; color: var(--sub); cursor: pointer; border-radius: 8px; }
+.cactions button:focus-visible { outline: 2px solid var(--primary); }
+.cactions button.danger { color: var(--bad); }
+.cbody.editing > .ctext, .cbody.editing > .cactions { display: none; }
+/* 입력창: 16px(아이폰 확대 방지), 쓰는 만큼 늘어남 */
+.cform { display: flex; gap: 8px; align-items: flex-end; }
+.cform textarea { flex: 1; min-width: 0; min-height: 44px; max-height: 136px; resize: none; border: 1.5px solid var(--line); border-radius: 14px; padding: 9px 12px; font: inherit; font-size: 16px; line-height: 1.5; outline: none; background: var(--card); }
+.cform textarea:focus { border-color: var(--primary); }
+.cbtns { display: flex; gap: 6px; justify-content: flex-end; }
+.reply-form, .edit-form { flex-direction: column; align-items: stretch; }
+.reply-form textarea, .edit-form textarea { flex: none; } /* 세로 배치에선 flex:1이 높이를 무시하게 만든다 */
+.edit-form { margin-top: 4px; }
+.btn.sm { padding: 0 16px; min-height: 44px; font-size: 14px; border-radius: 12px; }
+.btn.primary.sm { box-shadow: 0 3px 0 var(--primary-dark); }
+.cmsg { color: var(--bad); }
+.cmsg:empty { position: absolute; } /* 비었을 땐 자리 차지 X (role=status라 display:none은 안 씀) */
+
+/* 처리 중 버튼: 0.25초 넘게 걸릴 때만 글자 대신 빙글이(빠른 응답에서 깜빡임 방지), 버튼 크기는 그대로.
+   같은 영역의 다른 버튼은 흐리게 잠근다(app.js pending) */
+.busy { position: relative; pointer-events: none; animation: busy-label 0s .25s forwards; }
+.busy::after { content: ''; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--spin, var(--primary)); border-right-color: transparent; opacity: 0; animation: spin .8s linear infinite, busy-show 0s .25s forwards; }
+.btn.primary, .btn.success, .btn.danger { --spin: #fff; }
+.cactions .busy { --spin: var(--bad); }
+@keyframes busy-label { to { color: transparent; } }
+@keyframes busy-show { to { opacity: 1; } }
+[data-busy] button[aria-disabled] { opacity: .45; pointer-events: none; }
+[data-busy] textarea { opacity: .6; }

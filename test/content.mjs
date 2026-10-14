@@ -2,7 +2,7 @@
 // 실행: npm test   (실패가 있으면 목록을 출력하고 exit 1)
 // 선택: node test/content.mjs <blind-answers.json>  — 정답을 모르는 상태로 푼 답안을 채점(모호한 문제 찾기)
 import { readFileSync, existsSync } from 'node:fs';
-import { plain, blankParts, norm, grade, fromSpeech, maskAnswer } from '../public/grade.js';
+import { plain, blankParts, norm, grade, fromSpeech, maskAnswer, lev } from '../public/grade.js';
 import { makePicker, senses } from '../src/distractors.js';
 
 const load = f => JSON.parse(readFileSync(new URL('../content/' + f, import.meta.url), 'utf8'));
@@ -135,23 +135,48 @@ const overlap = (a, b) => {
   return x.some(p => y.some(q => p === q || (p.length >= 2 && q.includes(p)) || (q.length >= 2 && p.includes(q)))) || [...(G.get(a) ?? [])].some(i => G.get(b)?.has(i));
 };
 // 고정 오답 후보 전수 검사: 후보 6개 각각이 정답과 뜻이 겹치지 않아야 어떤 3개를 뽑아도 정답이 하나
+// 후보 형식: {en, ko}(단어장 밖 단어 가능) — 단어장 안 단어면 단어장의 뜻·유의어 묶음으로도 검사, 레벨은 정답 이상
 const FIXED = load('distractors.json');
 const EN = new Map(WORDS.map(w => [w.en, w]));
+// '하다'·'되다' 같은 어미만 남은 뜻(예: (경기를) 하다)은 비교에서 뺀다 — 기도하다·지불하다와 겹친다고 잘못 잡지 않게
+const GENERIC = new Set(['하다', '되다', '이다']);
+const sensesClash = (a, b) => {
+  const [x, y] = [a.filter(s => !GENERIC.has(s)), b.filter(s => !GENERIC.has(s))];
+  return x.some(p => y.some(q => p === q || (p.length >= 2 && q.includes(p)) || (q.length >= 2 && p.includes(q))));
+};
+// 철자가 비슷한 함정 보기(weather/whether, endure/endorse, look up to/look forward to)인지
+const lookAlike = (a, b) => {
+  const [x, y] = [norm(a), norm(b)];
+  if (x.includes(' ') && x.split(' ')[0] === y.split(' ')[0]) return true; // 같은 동사의 구동사
+  let p = 0;
+  while (p < x.length && x[p] === y[p]) p++;
+  const d = lev(x, y);
+  return p >= 3 || d <= 3 || (p >= 2 && d <= Math.ceil(Math.max(x.length, y.length) / 2) + 1);
+};
 for (const w of WORDS) {
   const c = FIXED[w.id];
-  if (!Array.isArray(c) || c.length < 3) {
-    fail(w.id, '오답 후보가 3개 미만');
+  if (!Array.isArray(c) || c.length < 6) {
+    fail(w.id, '오답 후보가 6개 미만');
     continue;
   }
-  if (new Set(c).size !== c.length) fail(w.id, '오답 후보 중복');
-  for (const en of c) {
-    const o = EN.get(en);
-    if (!o) fail(w.id, `없는 단어 후보 "${en}"`);
-    else if (o.en === w.en || o.ko === w.ko || overlap(w.en, o.en)) fail(w.id, `후보 뜻 겹침: ${w.en}(${w.ko}) ~ ${o.en}(${o.ko})`);
+  if (c.some(x => typeof x !== 'object' || !x.en?.trim() || !x.ko?.trim())) {
+    fail(w.id, '오답 후보 형식({en, ko})');
+    continue;
+  }
+  if (new Set(c.map(x => norm(x.en))).size !== c.length) fail(w.id, '오답 후보 중복');
+  for (const x of c) {
+    if (norm(x.en) === norm(w.en)) fail(w.id, `후보가 정답 자체: ${x.en}`);
+    if (x.ko === w.ko || sensesClash(senses(w.ko), senses(x.ko))) fail(w.id, `후보 뜻 겹침: ${w.en}(${w.ko}) ~ ${x.en}(${x.ko})`);
+    const o = EN.get(x.en);
+    if (o) {
+      if (overlap(w.en, o.en)) fail(w.id, `후보가 유의어 묶음/뜻 겹침: ${w.en}(${w.ko}) ~ ${o.en}(${o.ko})`);
+      // 쉬운 단어는 철자 함정일 때만 허용(rice·bread 같은 쉬운 '아무 단어'는 금지)
+      if (o.lv < w.lv && !lookAlike(w.en, o.en)) fail(w.id, `후보가 정답보다 쉬움: ${o.en}(lv${o.lv}) < ${w.en}(lv${w.lv})`);
+    }
   }
   // 실제 출제 함수가 고정 후보만 쓰는지
   const opts = pick(w, shuffle, FIXED);
-  if (opts.length !== 3 || opts.some(o => !c.includes(o.en))) fail(w.id, '출제 보기가 고정 후보 밖에서 나옴');
+  if (opts.length !== 3 || opts.some(o => !c.some(x => x.en === o.en && x.ko === o.ko))) fail(w.id, '출제 보기가 고정 후보 밖에서 나옴');
 }
 
 // ---------- 문법 ----------
@@ -234,6 +259,19 @@ const { freshOrder } = await import('../src/queue.js');
   const ranks = freshOrder(GRAMMAR, 2).map(rank);
   if (ranks.some((r, i) => i && r < ranks[i - 1])) fail('freshOrder', '레벨 순서(내 레벨 → 위 → 아래)가 깨짐');
   if (freshOrder(WORDS, 1).slice(0, 15).some(x => x.lv !== 1)) fail('freshOrder', '단어도 내 레벨부터 나와야 함');
+}
+
+// ---------- 숨김 단어(너무 쉬운 1단계) ----------
+{
+  const hidden = load('hidden.json');
+  const byId = new Map(WORDS.map(w => [w.id, w]));
+  for (const id of hidden) if (!byId.has(id)) fail('hidden', `없는 단어 id ${id}`);
+  for (const en of ['dog', 'cat', 'apple', 'red']) {
+    const w = WORDS.find(x => x.en === en);
+    if (w && !hidden.includes(w.id)) fail('hidden', `너무 쉬운 "${en}"이 숨김 목록에 없음`);
+  }
+  const shown = WORDS.filter(w => w.lv === 1 && !hidden.includes(w.id));
+  if (shown.length < 20) fail('hidden', `1단계에 남은 단어가 너무 적음(${shown.length})`);
 }
 
 // ---------- 형태 안내(표제어와 다른 빈칸 정답) ----------

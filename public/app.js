@@ -35,7 +35,9 @@ const icon = (name, size = 22) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
 async function api(path, body) {
-  const r = await fetch('/api/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const r = await fetch('/api/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}).catch(() => {
+    throw new Error('인터넷 연결을 확인하고 다시 눌러 주세요');
+  });
   const data = await r.json().catch(() => ({}));
   if (r.status === 401 && path !== 'login') {
     go('#/login');
@@ -202,11 +204,21 @@ async function quiz(kind, mode) {
 
   const q = [...items];
   const seen = new Set();
+  const misses = new Map(); // 이번 세션에서 문제별로 틀린 횟수 — 2번 틀리면 오늘은 그만(내일 복습에 이미 들어가 있음)
+  const MAX_MISSES = 2;
   const right = [];
   const wrong = [];
   let attempts = 0;
 
   next();
+
+  // 문제 종류 뱃지: 방금 틀려서 다시 나온 문제 > 오답노트 > 지난 복습 > 오늘 새 문제
+  function badge(it) {
+    if (misses.get(it.id)) return '<span class="chip warn">틀린 문제 · 다시</span>';
+    if (mode === 'wrong') return `<span class="chip warn">오답 복습${it.wrongCount ? ` · ${it.wrongCount}번 틀림` : ''}</span>`;
+    if (it.isNew) return '<span class="chip new">새 문제</span>';
+    return `<span class="chip">복습</span>${it.wrongCount ? `<span class="chip warn">${it.wrongCount}번 틀렸던 문제</span>` : ''}`;
+  }
 
   function next() {
     if (!q.length) return finish();
@@ -223,7 +235,7 @@ async function quiz(kind, mode) {
         <span class="count">${q.length}개 남음</span>
       </div>
       <div class="qbody">
-        <div class="qmeta">${it.isNew ? '<span class="chip new">NEW</span>' : '<span class="chip">복습</span>'}${it.tag ? `<span class="chip soft">${esc(it.tag)}</span>` : ''}${it.wrongCount ? `<span class="chip warn">${it.wrongCount}번 틀림</span>` : ''}</div>
+        <div class="qmeta">${badge(it)}${it.tag ? `<span class="chip soft">${esc(it.tag)}</span>` : ''}</div>
         ${type === 'cloze' ? clozeView(it, kind) : type === 'blocks' ? blocksView(it) : choiceView(it, type)}
       </div>
       <div class="sheet" id="sheet"></div>
@@ -473,6 +485,8 @@ async function quiz(kind, mode) {
   function result(it, g, typed) {
     const ok = g === 'ok';
     attempts++;
+    const missed = ok ? misses.get(it.id) ?? 0 : (misses.get(it.id) ?? 0) + 1;
+    if (!ok) misses.set(it.id, missed);
     if (!seen.has(it.id)) {
       seen.add(it.id);
       (ok ? right : wrong).push(it);
@@ -503,7 +517,7 @@ async function quiz(kind, mode) {
         ${(g === 'close' || g === 'bad') && typed ? `<p class="small">내 답: <s>${esc(typed)}</s>${formMiss ? ` → 이 문장에서는 <b>${esc(ans)}</b>(${esc(form)})${josa(ans, '이', '가')} 들어가요.` : ''}</p>` : ''}
         <p class="full"><button class="iconbtn" id="sayFull" aria-label="문장 듣기">${icon('speaker', 18)}</button>${esc(full)}</p>
         ${it.tip ? `<p class="tip">💡 ${esc(it.tip)}</p>` : ''}
-        ${ok ? '' : '<p class="small">이 문제는 잠시 뒤에 한 번 더, 그리고 내일 다시 나와요.</p>'}
+        ${ok ? '' : `<p class="small">${missed < MAX_MISSES ? '이 문제는 잠시 뒤에 한 번 더, 그리고 내일 다시 나와요.' : '오늘은 여기까지! 이 문제는 내일 복습에서 다시 만나요.'}</p>`}
         <button class="btn big ${ok ? 'success' : 'danger'}" id="cont">계속하기</button>
       </div>`;
     speak(full);
@@ -513,7 +527,8 @@ async function quiz(kind, mode) {
       if (moved) return; // 버튼 클릭 + Enter가 겹쳐 두 문제를 건너뛰지 않게
       moved = true;
       q.shift();
-      if (!ok) q.splice(Math.min(3, q.length), 0, it); // 틀린 문제는 최소 3문제 뒤에 다시(바로 연달아 X), 맞힐 때까지
+      // 틀린 문제는 3문제 뒤에 한 번만 다시. 두 번 틀리면 오늘은 넘어간다(내일 복습에 이미 잡혀 있음)
+      if (!ok && missed < MAX_MISSES) q.splice(Math.min(3, q.length), 0, it);
       next();
     };
     $('#cont').onclick = cont;
@@ -701,8 +716,19 @@ async function settings() {
     }
     const keyP = api('push/key').catch(() => ({ key: '' })); // 탭 전에 미리 받아 둔다(iOS는 탭 직후에 구독해야 함)
     const sub = await reg.pushManager.getSubscription().catch(() => null);
-    const granted = Notification.permission === 'granted' && !!sub;
-    msg.textContent = granted
+    // 앱(TWA)에서는 Notification.permission이 실제와 다르게 'default'로 보이는 경우가 있어 푸시 권한 상태를 함께 본다
+    const pstate = await reg.pushManager.permissionState({ userVisibleOnly: true }).catch(() => Notification.permission);
+    const granted = (pstate === 'granted' || Notification.permission === 'granted') && !!sub;
+    // 갤럭시 앱이 삼성 인터넷으로 열리면 알림 권한이 저장되지 않아 알림이 표시되지 않는다
+    const samsungApp = /SamsungBrowser/.test(navigator.userAgent) && standalone;
+    // 기기별 문제를 원격으로 진단하려고 단계 기록을 서버에 남긴다(비밀번호·개인정보 없음)
+    const plog = (step, detail = '') =>
+      api('push/log', { step, detail: String(detail).slice(0, 200), perm: Notification.permission, standalone, ua: navigator.userAgent.slice(0, 160) }).catch(() => {});
+    plog('view', `sub=${!!sub} pstate=${pstate}`);
+    const wait = (p, ms, label) => Promise.race([p, new Promise(r => setTimeout(() => r(label), ms))]);
+    msg.textContent = samsungApp
+      ? '이 앱이 삼성 인터넷으로 열려 있어 알림이 표시되지 않아요. 크롬(Chrome)을 설치·사용 설정한 뒤 최신 앱(1.2.0)으로 업데이트해 주세요.'
+      : granted
       ? '이 기기로 알림을 받아요: 댓글·답글, 친구의 미션 완료, 저녁 8시 미션 리마인더'
       : Notification.permission === 'denied'
         ? '알림이 차단돼 있어요. 기기 설정 → 알림에서 이 앱을 허용한 뒤 다시 눌러 주세요.'
@@ -710,21 +736,41 @@ async function settings() {
     on.hidden = granted || Notification.permission === 'denied';
     off.hidden = !granted;
     test.hidden = !granted;
+    const SETTINGS_HINT = ios ? '아이폰 설정 → 알림 → 보카데이에서 알림을 허용한 뒤 다시 눌러 주세요.' : '휴대폰 설정 → 애플리케이션 → 보카데이 → 알림을 켠 뒤 다시 눌러 주세요.';
     on.onclick = async () => {
-      msg.textContent = '알림 권한을 요청하는 중…';
+      on.disabled = true;
+      msg.classList.add('loud');
+      msg.textContent = '알림 권한을 요청하는 중… 허용 창이 뜨면 "허용"을 눌러 주세요.';
+      plog('click');
       try {
-        const perm = await Notification.requestPermission();
+        let perm = Notification.permission;
         if (perm !== 'granted') {
-          msg.textContent = perm === 'denied' ? '알림이 차단됐어요. 기기 설정 → 알림에서 이 앱을 허용해 주세요.' : '알림 권한을 허용하지 않았어요.';
+          // 갤럭시 앱(TWA)에서는 권한 창이 늦거나 안 뜨는 경우가 있어 8초까지만 기다린다
+          perm = await wait(Notification.requestPermission(), 8000, 'timeout');
+          plog('permission', perm);
+        }
+        if (perm === 'denied') {
+          msg.textContent = '알림이 꺼져 있어요. ' + SETTINGS_HINT;
           return;
         }
+        // 권한 창이 응답이 없으면 구독을 바로 시도한다(크롬은 구독하면서 권한을 확인한다)
         const { key } = await keyP;
         if (!key) throw new Error('서버 키를 받지 못했어요');
-        const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        msg.textContent = '알림을 연결하는 중…';
+        const s = await wait(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }), 15000, null);
+        if (!s) throw Object.assign(new Error('응답이 없어요'), { name: 'TimeoutError' });
+        plog('subscribed', new URL(s.endpoint).host);
         await api('push/subscribe', { subscription: s.toJSON() });
+        msg.classList.remove('loud');
         pushUI();
       } catch (e) {
-        msg.textContent = '알림을 켜지 못했어요: ' + (e.message || e);
+        plog('error', `${e.name}: ${e.message}`);
+        msg.textContent =
+          e.name === 'NotAllowedError' || e.name === 'TimeoutError'
+            ? '알림 권한을 받지 못했어요. ' + SETTINGS_HINT
+            : '알림을 켜지 못했어요: ' + (e.message || e);
+      } finally {
+        on.disabled = false;
       }
     };
     off.onclick = async () => {
@@ -896,6 +942,32 @@ function wordDiff(a, b) {
   return out.join(' ');
 }
 
+// 처리 중: 누른 버튼은 로딩 표시, 같은 영역(scope)의 다른 버튼·입력은 끝날 때까지 잠근다 → 여러 번 눌러도 한 번만 처리.
+// disabled 대신 aria-disabled를 써서 포커스가 사라지지 않게 한다(스크린리더·키보드).
+async function pending(btn, scope, fn) {
+  if (scope.dataset.busy) return;
+  scope.dataset.busy = '1';
+  btn.classList.add('busy');
+  btn.setAttribute('aria-busy', 'true');
+  const others = [...scope.querySelectorAll('button')].filter(b => b !== btn);
+  const fields = [...scope.querySelectorAll('textarea')];
+  others.forEach(b => b.setAttribute('aria-disabled', 'true'));
+  fields.forEach(t => (t.readOnly = true));
+  // 키보드(Enter·Space)로 누르는 것까지 막는다 — CSS pointer-events는 마우스·터치만 막음
+  const block = e => e.target.closest('button') && e.target.closest('button') !== btn && (e.preventDefault(), e.stopPropagation());
+  scope.addEventListener('click', block, true);
+  try {
+    return await fn();
+  } finally {
+    delete scope.dataset.busy;
+    scope.removeEventListener('click', block, true);
+    btn.classList.remove('busy');
+    btn.removeAttribute('aria-busy');
+    others.forEach(b => b.removeAttribute('aria-disabled'));
+    fields.forEach(t => (t.readOnly = false));
+  }
+}
+
 const EDIT_TYPES = { spelling: ['맞춤법', 'sp'], grammar: ['문법', 'gr'], natural: ['더 자연스럽게', 'na'] };
 
 function reviewView(text, r) {
@@ -954,68 +1026,91 @@ async function diary(date) {
   </section>
   ${tabs('diary')}`;
 
-  document.querySelectorAll('.cform').forEach(f => {
-    f.onsubmit = async e => {
-      e.preventDefault();
-      const input = f.querySelector('input');
-      if (!input.value.trim()) return;
-      await api('diary/comment', { uid: f.dataset.uid, date: d.date, text: input.value });
-      diary(date);
+  // 댓글: 서버 응답(댓글 목록)으로 그 칸만 다시 그린다 — 화면 전체를 다시 불러오지 않아 빠르다
+  // 처리 중에는 그 댓글 칸 전체를 잠근다(pending) — 실패하면 쓰던 글은 그대로 남는다
+  const bindComments = box => {
+    const uid = box.dataset.uid;
+    const msg = box.querySelector('.cmsg');
+    const send = (path, body, btn) =>
+      pending(btn, box, async () => {
+        msg.textContent = '';
+        try {
+          const r = await api(path, { uid, date: d.date, ...body });
+          const fresh = document.createElement('div');
+          fresh.innerHTML = comments({ uid, text: 'x', comments: r.comments }, d.me);
+          const nb = fresh.firstElementChild;
+          box.replaceWith(nb);
+          bindComments(nb);
+          return nb;
+        } catch (e) {
+          msg.textContent = e.message;
+        }
+      });
+    const form = (cls, placeholder, label, value = '') => {
+      const f = document.createElement('form');
+      f.className = 'cform ' + cls;
+      f.innerHTML = `<textarea rows="1" maxlength="300" aria-label="${placeholder}" placeholder="${placeholder}"></textarea>
+        <div class="cbtns"><button type="button" class="btn ghost sm c-cancel">취소</button><button class="btn primary sm">${label}</button></div>`;
+      f.querySelector('textarea').value = value;
+      return f;
     };
-  });
-  // 답글 · 내 댓글 수정 · 삭제(두 번 눌러 확정)
-  document.querySelectorAll('.comments').forEach(box => {
-    box.addEventListener('click', async ev => {
-      const b = ev.target.closest('button.link');
+    const submitOf = (f, path, body) => e => {
+      e.preventDefault();
+      const ta = f.querySelector('textarea');
+      const t = ta.value.trim();
+      if (!t) return ta.focus();
+      send(path, { ...body, text: t }, f.querySelector('button:not([type])')).then(nb => {
+        if (nb && path === 'diary/comment' && !body.parent) nb.querySelector(':scope > .cform textarea').focus(); // 이어서 쓰기 편하게
+      });
+    };
+    const main = box.querySelector(':scope > .cform');
+    main.onsubmit = submitOf(main, 'diary/comment', {});
+    // 입력창은 쓰는 만큼 늘어난다(최대 5줄쯤, CSS max-height)
+    box.addEventListener('input', e => {
+      if (e.target.tagName !== 'TEXTAREA') return;
+      const t = e.target;
+      t.style.height = '';
+      t.style.height = t.scrollHeight + t.offsetHeight - t.clientHeight + 'px'; // 테두리 두께까지
+    });
+    // 답글 · 내 댓글 수정 · 삭제(두 번 눌러 확정, 3초 지나면 원래대로)
+    box.addEventListener('click', ev => {
+      const b = ev.target.closest('.cactions button');
       if (!b) return;
       const c = b.closest('.comment');
       const id = c.dataset.id;
-      const uid = box.dataset.uid;
-      const form = (cls, placeholder, value = '') => {
-        const f = document.createElement('form');
-        f.className = 'cform ' + cls;
-        f.innerHTML = `<input maxlength="300" aria-label="${placeholder}" placeholder="${placeholder}"><button class="btn ghost">등록</button><button type="button" class="btn ghost c-cancel">취소</button>`;
-        f.querySelector('input').value = value;
-        f.querySelector('.c-cancel').onclick = () => diary(date);
-        return f;
-      };
-      try {
-        if (b.classList.contains('c-reply')) {
-          if (c.nextElementSibling?.classList.contains('reply-form')) return;
-          const f = form('reply-form', '답글 달기');
-          c.after(f);
-          f.querySelector('input').focus();
-          f.onsubmit = async e2 => {
-            e2.preventDefault();
-            const t = f.querySelector('input').value.trim();
-            if (t) await api('diary/comment', { uid, date: d.date, text: t, parent: id }).then(() => diary(date));
-          };
-        } else if (b.classList.contains('c-edit')) {
-          const span = c.querySelector('.ctext');
-          const f = form('edit-form', '댓글 수정', span.textContent);
-          span.replaceWith(f);
-          c.querySelector('.cactions').remove();
-          f.querySelector('input').focus();
-          f.onsubmit = async e2 => {
-            e2.preventDefault();
-            const t = f.querySelector('input').value.trim();
-            if (t) await api('diary/comment/edit', { uid, date: d.date, id, text: t }).then(() => diary(date));
-          };
-        } else if (b.classList.contains('c-del')) {
-          if (!b.dataset.armed) {
-            b.dataset.armed = '1';
-            b.textContent = '정말 삭제';
-            b.classList.add('danger');
-            return;
-          }
-          await api('diary/comment/delete', { uid, date: d.date, id });
-          diary(date);
+      if (b.classList.contains('c-reply')) {
+        const th = c.closest('.cthread');
+        const open = th.querySelector('.reply-form');
+        if (open) return open.querySelector('textarea').focus();
+        const f = form('reply-form', `${esc(c.dataset.name)}님에게 답글`, '답글');
+        f.querySelector('.c-cancel').onclick = () => f.remove();
+        f.onsubmit = submitOf(f, 'diary/comment', { parent: id });
+        th.append(f); // 답글이 실제로 붙을 자리(스레드 맨 아래)에 연다
+        f.querySelector('textarea').focus();
+      } else if (b.classList.contains('c-edit')) {
+        const body = c.querySelector('.cbody');
+        const f = form('edit-form', '댓글 수정', '저장', c.querySelector('.ctext').textContent);
+        body.classList.add('editing');
+        f.querySelector('.c-cancel').onclick = () => (f.remove(), body.classList.remove('editing'));
+        f.onsubmit = submitOf(f, 'diary/comment/edit', { id });
+        body.append(f);
+        const ta = f.querySelector('textarea');
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      } else if (b.classList.contains('c-del')) {
+        if (!b.dataset.armed) {
+          b.dataset.armed = '1';
+          b.textContent = '정말 삭제할까요?';
+          b.classList.add('danger');
+          setTimeout(() => b.isConnected && !box.dataset.busy && (delete b.dataset.armed, (b.textContent = '삭제'), b.classList.remove('danger')), 3000);
+          return;
         }
-      } catch (e3) {
-        $('#msg') ? ($('#msg').textContent = e3.message) : console.warn(e3.message);
+        send('diary/comment/delete', { id }, b);
       }
     });
-  });
+  };
+  document.querySelectorAll('.comments').forEach(bindComments);
 
   // 내 일기: 저장된 글은 게시글처럼 보이고 '수정'을 눌러야 입력창이 열린다.
   // 첨삭은 '첨삭 받기'를 누른 동안만 보이고, 고쳐서 저장하면 사라진다(다시 들어와도 안 보임).
@@ -1041,12 +1136,12 @@ async function diary(date) {
         <div class="actions"><button class="btn primary" id="save">저장</button>${text ? '<button class="btn ghost" id="cancel">취소</button>' : ''}${checkBtn}</div>`;
       const ta = $('#text');
       ta.oninput = () => ($('#cnt').textContent = `${ta.value.length}/${d.maxLen}`);
-      $('#save').onclick = () => save().catch(e => ($('#msg').textContent = e.message));
+      $('#save').onclick = e => pending(e.currentTarget, box, () => save().catch(e => ($('#msg').textContent = e.message)));
       $('#cancel')?.addEventListener('click', () => {
         draft = null;
         render('post');
       });
-      $('#check').onclick = check;
+      $('#check').onclick = e => pending(e.currentTarget, box, check);
     }
   };
   const showReview = r => {
@@ -1078,7 +1173,6 @@ async function diary(date) {
     return true;
   };
   const check = async () => {
-    $('#check').disabled = true;
     try {
       if ($('#text') && !(await save())) return render('edit'); // 쓰던 글은 먼저 저장
       $('#review').innerHTML = '<div class="review loading"><span class="dots"></span> 선생님이 첨삭하고 있어요… (20초쯤)</div>';
@@ -1096,19 +1190,37 @@ async function diary(date) {
 }
 
 // 댓글: 댓글 → 답글 한 단계. 내 댓글은 수정·삭제 가능
+// 한 줄 머리(아바타 · 이름 · 시간) → 본문 → 글자 버튼(답글·수정·삭제). 답글은 부모 본문 줄에 맞춰 들여쓴다
+const ago = t => {
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m < 1) return '방금';
+  if (m < 60) return `${m}분 전`;
+  if (m < 24 * 60) return `${Math.floor(m / 60)}시간 전`;
+  const d = new Date(t);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+};
 function comments(e, me) {
   if (!e.text) return '';
   const cs = e.comments;
   const one = c =>
     c.deleted
-      ? `<div class="comment deleted" data-id="${c.id}"><i>삭제된 댓글이에요</i></div>`
-      : `<div class="comment" data-id="${c.id}"><b>${esc(c.name)}</b><span class="ctext">${esc(c.text)}</span>${c.editedAt ? '<small class="sub">(수정됨)</small>' : ''}
-        <span class="cactions">${!c.parent ? '<button type="button" class="link c-reply">답글</button>' : ''}${c.by === me ? '<button type="button" class="link c-edit">수정</button><button type="button" class="link c-del">삭제</button>' : ''}</span></div>`;
+      ? `<div class="comment deleted" data-id="${c.id}"><div class="avatar sm">·</div><div class="cbody"><p class="ctext">삭제된 댓글이에요</p></div></div>`
+      : `<div class="comment ${c.by === me ? 'mine' : ''}" data-id="${c.id}" data-name="${esc(c.name)}">
+        <div class="avatar sm" aria-hidden="true">${esc(c.name[0])}</div>
+        <div class="cbody">
+          <p class="cmeta"><b>${esc(c.name)}</b><time datetime="${new Date(c.at).toISOString()}">${ago(c.at)}</time>${c.editedAt ? '<span>수정됨</span>' : ''}</p>
+          <p class="ctext">${esc(c.text)}</p>
+          <div class="cactions">${!c.parent ? '<button type="button" class="c-reply">답글</button>' : ''}${c.by === me ? '<button type="button" class="c-edit">수정</button><button type="button" class="c-del">삭제</button>' : ''}</div>
+        </div></div>`;
   const thread = cs
-    .filter(c => !c.parent)
+    .filter(c => !c.parent && (!c.deleted || cs.some(r => r.parent === c.id))) // 답글 없는 삭제 자리는 숨김
     .map(c => `<div class="cthread">${one(c)}${cs.filter(r => r.parent === c.id).map(r => `<div class="creply">${one(r)}</div>`).join('')}</div>`)
     .join('');
-  return `<div class="comments" data-uid="${e.uid}">${thread}<form class="cform" data-uid="${e.uid}"><input placeholder="댓글 달기" maxlength="300" aria-label="댓글"><button class="btn ghost">등록</button></form></div>`;
+  const n = cs.filter(c => !c.deleted).length;
+  return `<div class="comments" data-uid="${e.uid}">
+    <p class="chead">댓글${n ? ` <b>${n}</b>` : ''}</p>${thread}
+    <form class="cform"><textarea rows="1" maxlength="300" placeholder="댓글을 남겨 보세요" aria-label="댓글"></textarea><div class="cbtns"><button class="btn primary sm">등록</button></div></form>
+    <p class="small cmsg" role="status"></p></div>`;
 }
 
 addEventListener('hashchange', route);

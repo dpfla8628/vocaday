@@ -23,7 +23,8 @@ export function makePicker(words, groups) {
   // fixed: content/distractors.json — 단어마다 사람이 검수한 오답 후보(6개). 있으면 그중 3개를 무작위로 낸다
   const byEn = new Map(words.map(w => [w.en, w]));
   return (x, shuffle, fixed, n = 3) => {
-    if (fixed?.[x.id]) return shuffle([...fixed[x.id]]).slice(0, n).map(en => ({ en, ko: byEn.get(en).ko }));
+    // 후보는 {en, ko}(단어장 밖 단어도 가능) 또는 단어장 표제어 문자열
+    if (fixed?.[x.id]) return shuffle([...fixed[x.id]]).slice(0, n).map(c => (typeof c === 'string' ? { en: c, ko: byEn.get(c).ko } : { en: c.en, ko: c.ko }));
     const picked = [];
     const fill = pool => {
       for (const w of shuffle([...pool])) {

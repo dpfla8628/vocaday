@@ -9,6 +9,7 @@ import g34 from '../content/grammar_lv34.json';
 import confusables from '../content/confusables.json';
 import fixedDistractors from '../content/distractors.json';
 import PLACEMENT from '../content/placement.json';
+import HIDDEN_IDS from '../content/hidden.json'; // 성인에게 너무 쉬운 단어(dog·cat 등) — 출제하지 않는다(파일에서 빼면 복구)
 import { makePicker } from './distractors.js';
 import { placeLevel, PASS } from './placement.js';
 import { freshOrder } from './queue.js';
@@ -17,6 +18,8 @@ import { notify, nextNotice, subscriptions, saveSubscriptions } from './push.js'
 
 const KIND_KO = { word: '단어', grammar: '문법' };
 const others = uid => Object.keys(USERS).filter(x => x !== uid);
+let later = p => p; // fetch()에서 ctx.waitUntil로 바뀐다(응답 후 백그라운드 실행)
+const notifyLater = (env, uids, notice) => later((async () => { for (const t of uids) await notify(env, t, notice); })());
 
 const WORDS = [...w1, ...w2, ...w3, ...w4].map(x => ({ ...x, kind: 'word' }));
 const GRAMMAR = [...g12, ...g34].map(x => ({ ...x, kind: 'grammar' }));
@@ -113,10 +116,15 @@ const dayOf = (u, d) => (u.days[d] ??= { word: emptyKind(), grammar: emptyKind()
 const complete = day => !!(day?.word.done && day?.grammar.done);
 
 // ---------- 학습 로직 ----------
+// 내 레벨보다 쉬운 문제는 새 문제·복습·오답노트 모두에서 빼다(레벨을 올린 뒤 dog·cat 같은 게 다시 나오지 않게).
+// 내 일기에서 만든 복습 문제(c-)는 내 실수라 레벨과 무관하게 남긴다
+const HIDDEN = new Set(HIDDEN_IDS);
+const atLevel = (u, id) => id.startsWith('c-') || (!HIDDEN.has(id) && (itemOf(u, id)?.lv ?? 0) >= u.level);
+
 function queue(u, kind, mode) {
   const t = today();
   const plan = PLANS[u.plan];
-  const mine = Object.entries(u.items).filter(([id]) => itemOf(u, id)?.kind === kind);
+  const mine = Object.entries(u.items).filter(([id]) => itemOf(u, id)?.kind === kind && atLevel(u, id));
 
   if (mode === 'wrong') return mine.filter(([, s]) => s.wrong > 0 && s.box < MASTER_BOX).map(([id]) => id);
 
@@ -129,7 +137,7 @@ function queue(u, kind, mode) {
     .map(([id]) => id);
   const backlog = due.length >= plan.reviewCap;
   const newLeft = backlog ? 0 : Math.max(0, plan[kind] - (u.days[t]?.[kind].new ?? 0));
-  const fresh = freshOrder(BANK[kind].filter(x => !u.items[x.id]), u.level)
+  const fresh = freshOrder(BANK[kind].filter(x => !u.items[x.id] && !HIDDEN.has(x.id) && x.lv >= u.level), u.level)
     .slice(0, newLeft)
     .map(x => x.id);
   return [...due, ...fresh];
@@ -205,7 +213,7 @@ function stats(u) {
     today: u.days[t] ?? { word: emptyKind(), grammar: emptyKind() },
     learned: vals.length,
     mastered: vals.filter(s => s.box >= MASTER_BOX).length,
-    wrongNote: vals.filter(s => s.wrong > 0 && s.box < MASTER_BOX).length,
+    wrongNote: Object.entries(u.items).filter(([id, s]) => itemOf(u, id) && atLevel(u, id) && s.wrong > 0 && s.box < MASTER_BOX).length,
     accuracy7: a7 ? Math.round((c7 / a7) * 100) : null,
     answered7: a7,
     history,
@@ -342,7 +350,7 @@ async function api(req, env, url) {
       day.done = true;
       await saveUser();
       // 처음 끝냈을 때만 친구에게 알림
-      if (first) for (const o of others(u.id)) await notify(env, o, { title: `🔥 ${nameOf(u.id)}님이 오늘 ${KIND_KO[body.kind]} 미션을 끝냈어요`, body: '나도 오늘 미션 하러 가기', url: '/#/home' });
+      if (first) notifyLater(env, others(u.id), { title: `🔥 ${nameOf(u.id)}님이 오늘 ${KIND_KO[body.kind]} 미션을 끝냈어요`, body: '나도 오늘 미션 하러 가기', url: '/#/home' });
       return json(stats(u));
     }
     // ---------- 푸시 알림 ----------
@@ -361,10 +369,21 @@ async function api(req, env, url) {
       await saveSubscriptions(env, u.id, subs);
       return json({ ok: true, devices: subs.length });
     }
+    case 'POST /api/push/log': {
+      // 알림 켜기 단계 기록(기기별 원격 진단용). 최근 30개만
+      const entry = { at: Date.now(), step: String(body.step ?? '').slice(0, 20), detail: String(body.detail ?? '').slice(0, 200), perm: String(body.perm ?? '').slice(0, 10), standalone: !!body.standalone, ua: String(body.ua ?? '').slice(0, 160) };
+      console.log(`push-log ${u.id} ${entry.step} ${entry.detail} perm=${entry.perm}`);
+      later((async () => {
+        const list = (await get(env, 'pushlog:' + u.id)) ?? [];
+        list.push(entry);
+        await put(env, 'pushlog:' + u.id, list.slice(-30));
+      })());
+      return json({ ok: true });
+    }
     case 'GET /api/push/next': // 서비스 워커가 푸시를 받으면 여기서 알림 내용을 가져간다
       return json((await nextNotice(env, u.id)) ?? {});
     case 'POST /api/push/test':
-      await notify(env, u.id, { title: '🔔 알림 테스트', body: '알림이 잘 와요! 댓글·친구 미션 완료·저녁 8시 리마인더를 받아요.', url: '/#/settings' });
+      notifyLater(env, [u.id], { title: '🔔 알림 테스트', body: '알림이 잘 와요! 댓글·친구 미션 완료·저녁 8시 리마인더를 받아요.', url: '/#/settings' });
       return json({ ok: true });
     case 'GET /api/board': {
       const { results } = await env.DB.prepare("SELECT v FROM kv WHERE k LIKE 'user:%'").all();
@@ -379,15 +398,21 @@ async function api(req, env, url) {
     case 'GET /api/diary': {
       const t = today();
       const date = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : t;
-      const { results } = await env.DB.prepare('SELECT k, v FROM kv WHERE k LIKE ?').bind('diary:%').all();
-      const all = results.map(r => JSON.parse(r.v));
+      // 전체 일기를 읽지 않는다: 날짜 줄은 키(diary:<uid>:<date>)만, 본문은 보고 있는 날짜의 일기만
+      const uids = Object.keys(USERS);
+      const [keys, ...rows] = await env.DB.batch([
+        env.DB.prepare("SELECT k FROM kv WHERE k LIKE 'diary:%' AND substr(k, -10) >= ?").bind(addDays(t, -13)),
+        ...uids.map(uid => env.DB.prepare('SELECT v FROM kv WHERE k = ?').bind(`diary:${uid}:${date}`)),
+      ]);
+      const wrote = keys.results.map(r => r.k.split(':')); // ['diary', uid, date]
       const days = [];
       for (let i = 13; i >= 0; i--) {
         const d = addDays(t, -i);
-        days.push({ date: d, by: all.filter(e => e.date === d && e.text).map(e => e.uid) });
+        days.push({ date: d, by: wrote.filter(([, , kd]) => kd === d).map(([, uid]) => uid) });
       }
-      const entries = Object.keys(USERS).map(uid => {
-        const e = all.find(x => x.uid === uid && x.date === date);
+      const entries = uids.map((uid, i) => {
+        const v = rows[i].results[0]?.v;
+        const e = v ? JSON.parse(v) : null;
         return { uid, name: nameOf(uid), text: e?.text ?? '', comments: withIds(e?.comments), updatedAt: e?.updatedAt ?? null };
       });
       return json({ me: u.id, date, today: t, prompt: promptOf(date), maxLen: MAX_LEN, checksLeft: DIARY_CHECKS - (u.diaryChecks?.[t] ?? 0), entries, days });
@@ -403,7 +428,7 @@ async function api(req, env, url) {
       e.text = text;
       e.updatedAt = Date.now();
       await put(env, k, e);
-      if (firstToday) for (const o of others(u.id)) await notify(env, o, { title: `📔 ${nameOf(u.id)}님이 오늘 일기를 썼어요`, body: text.slice(0, 80), url: '/#/diary' });
+      if (firstToday) notifyLater(env, others(u.id), { title: `📔 ${nameOf(u.id)}님이 오늘 일기를 썼어요`, body: text.slice(0, 80), url: '/#/diary' });
       return json({});
     }
     case 'POST /api/diary/check': {
@@ -433,7 +458,7 @@ async function api(req, env, url) {
       return json({ review, checksLeft: DIARY_CHECKS - u.diaryChecks[t] });
     }
     case 'POST /api/diary/comment': {
-      const text = String(body.text ?? '').trim().slice(0, 300);
+      const text = commentText(body.text);
       const owner = String(body.uid ?? '');
       const date = String(body.date ?? '');
       if (!text || !USERS[owner] || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw err(400, '댓글을 확인해 주세요');
@@ -444,6 +469,9 @@ async function api(req, env, url) {
       // 답글은 한 단계만(댓글 → 답글). 답글에 또 답글은 없다
       const parent = body.parent ? String(body.parent) : null;
       if (parent && !e.comments.some(c => c.id === parent && !c.parent)) throw err(400, '답글을 달 댓글이 없어요');
+      // 같은 사람이 같은 글을 10초 안에 또 보내면(두 번 누름·네트워크 재전송) 한 번만 저장한다
+      // ponytail: 읽고-쓰기 사이 동시 요청은 못 막음. 필요해지면 Idempotency-Key + D1 유니크 키로
+      if (e.comments.some(c => c.by === u.id && c.text === text && (c.parent ?? null) === parent && Date.now() - c.at < 10_000)) return json({ comments: e.comments });
       e.comments.push({ id: randomHex(6), by: u.id, name: nameOf(u.id), text, at: Date.now(), ...(parent ? { parent } : {}) });
       await put(env, k, e);
       // 일기 주인과(답글이면) 원댓글 작성자에게 알림 — 내가 나에게는 X
@@ -451,7 +479,7 @@ async function api(req, env, url) {
       if (owner !== u.id) targets.add(owner);
       const pc = parent && e.comments.find(c => c.id === parent);
       if (pc && pc.by !== u.id) targets.add(pc.by);
-      for (const t of targets) await notify(env, t, { title: `💬 ${nameOf(u.id)}님의 ${parent ? '답글' : '댓글'}`, body: text.slice(0, 80), url: `/#/diary/${date}` });
+      notifyLater(env, [...targets], { title: `💬 ${nameOf(u.id)}님의 ${parent ? '답글' : '댓글'}`, body: text.slice(0, 80), url: `/#/diary/${date}` });
       return json({ comments: e.comments });
     }
     case 'POST /api/diary/comment/edit':
@@ -469,7 +497,7 @@ async function api(req, env, url) {
       if (c.by !== u.id) throw err(403, '내 댓글만 고치거나 지울 수 있어요');
       if (c.deleted) throw err(400, '삭제된 댓글이에요');
       if (route.endsWith('/edit')) {
-        const text = String(body.text ?? '').trim().slice(0, 300);
+        const text = commentText(body.text);
         if (!text) throw err(400, '내용을 써 주세요');
         c.text = text;
         c.editedAt = Date.now();
@@ -477,12 +505,14 @@ async function api(req, env, url) {
         c.deleted = true; // 답글이 달린 댓글은 자리만 남긴다
         c.text = '';
       } else e.comments = e.comments.filter(x => x.id !== id);
+      // 마지막 답글이 지워지면 자리만 남아 있던 삭제 댓글도 치운다
+      e.comments = e.comments.filter(x => !x.deleted || e.comments.some(r => r.parent === x.id));
       await put(env, k, e);
       return json({ comments: e.comments });
     }
     case 'GET /api/wrongs': {
       const items = Object.entries(u.items)
-        .filter(([id, s]) => itemOf(u, id) && s.wrong > 0 && s.box < MASTER_BOX)
+        .filter(([id, s]) => itemOf(u, id) && atLevel(u, id) && s.wrong > 0 && s.box < MASTER_BOX)
         .sort((a, b) => b[1].wrong - a[1].wrong)
         .map(([id, s]) => ({ ...itemOf(u, id), ...s, leech: s.wrong >= LEECH }));
       return json({ items });
@@ -490,6 +520,9 @@ async function api(req, env, url) {
   }
   throw err(404, 'not found');
 }
+
+// 댓글 본문: 앞뒤 공백 제거, 빈 줄은 한 줄까지만, 300자
+const commentText = t => String(t ?? '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 300);
 
 export default {
   // 저녁 리마인더(Cron, wrangler.jsonc env.app의 triggers): 그날 미션을 안 끝낸 사람에게만
@@ -505,10 +538,12 @@ export default {
       await notify(env, uid, { title: '⏰ 오늘 미션이 아직이에요', body: `${left.map(k => KIND_KO[k]).join('·')} 미션을 끝내고 연속 기록을 지켜요`, url: '/#/home' });
     }
   },
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     USERS = parseUsers(env);
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    // 알림 보내기는 응답을 먼저 돌려준 뒤 뒤에서(사용자가 버튼을 누르고 기다리지 않게)
+    later = p => ctx.waitUntil(Promise.resolve(p).catch(e => console.log('later error', e.message)));
     try {
       return await api(req, env, url);
     } catch (e) {

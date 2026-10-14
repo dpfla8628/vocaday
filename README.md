@@ -53,7 +53,8 @@
 - 매일 질문 하나. 막히면 `(꾸준히)`처럼 한국어를 섞어 써도 됩니다.
 - **첨삭 받기**를 누르면 무료 맞춤법 검사기(LanguageTool)로 오류를 잡고 Cloudflare Workers AI(오픈 모델)가 한국어로 설명합니다: 칭찬 → 원문 대비 수정 표시 → 맞춤법/문법/자연스러움 분류 설명 → 괄호 속 한국어의 영어 표현 → 원어민 추천 표현.
 - 첨삭은 그 자리에서만 보이고, 고쳐서 저장하면 사라집니다. 내 실수로 만든 복습 문제가 다음 날 문법 복습에 섞여 나옵니다.
-- 저장한 일기는 게시글처럼 보이고, 서로 댓글을 달 수 있습니다.
+- 저장한 일기는 게시글처럼 보이고, 서로 댓글·답글(한 단계)을 달고 내 댓글은 고치거나 지울 수 있습니다.
+- 등록·저장·첨삭을 누르면 그 버튼만 로딩 표시가 되고 같은 영역의 다른 버튼은 끝날 때까지 잠깁니다(여러 번 눌러도 한 번만 처리). 서버도 같은 사람이 10초 안에 보낸 같은 댓글은 한 번만 저장합니다.
 
 **친구**
 - 상대의 오늘 진행, 연속 학습일, 정답률, 최근 2주 기록. 둘 다 미션을 끝낸 날이 이어지면 '함께 연속'이 올라갑니다.
@@ -72,7 +73,7 @@ src/distractors.js   4지선다 보기 선택 규칙
 src/placement.js     레벨 판정
 src/diary.js         일기 첨삭(LanguageTool + Workers AI, 결과 검증)
 public/              화면 (app.js · grade.js 채점 · style.css)
-content/             문항 JSON(단어 4단계 · 문법 2파일 · 레벨 테스트 · 유의어 묶음 · 고정 오답 후보)
+content/             문항 JSON(단어 4단계 · 문법 2파일 · 레벨 테스트 · 유의어 묶음 · 고정 오답 후보 · 숨김 단어)
 test/                전수 테스트 · 스모크 · 문항 패치/검수 도구
 reports/, research_notes/   설계 전 리서치(교육과정 어휘, 앱 UX, 간격반복, 회화 표현)
 ```
@@ -122,10 +123,13 @@ npm run deploy:app
 # 최초 1회: JDK 17 + Android cmdline-tools를 ~/.bubblewrap 에 두고 config.json에 경로 지정, 서명 키 생성
 keytool -genkeypair -alias android -keyalg RSA -keysize 2048 -validity 10000 -keystore android/android.keystore
 # 프로젝트 생성 → 빌드 → 서명
-cd android && npx @bubblewrap/cli update --skipVersionUpgrade
+cd android && npx @bubblewrap/cli update --skipVersionUpgrade   # 최초 생성 때만(아래 주의)
 ./gradlew.bat assembleRelease            # app/build/outputs/apk/release/app-release-unsigned.apk
 zipalign -f -p 4 <unsigned.apk> aligned.apk && apksigner sign --ks android.keystore --ks-key-alias android --out vocaday.apk aligned.apk
 ```
+
+- **알림은 크롬으로 열려야 동작합니다.** 갤럭시 기본 브라우저(삼성 인터넷) 앱 모드에서는 알림을 허용해도 권한이 저장되지 않아, `LauncherActivity.createTwaLauncher()`에서 크롬을 우선 쓰도록 고쳤습니다(1.2.0, `AndroidManifest.xml`에 `<queries>` 추가). `bubblewrap update`를 다시 실행하면 이 수정이 덮어써지므로, 버전은 `app/build.gradle`의 `versionCode`/`versionName`만 올려 `gradlew`로 빌드합니다.
+- 서버(화면·API) 변경은 앱에 바로 반영되고, 앱을 다시 설치해야 하는 건 브라우저 엔진·권한·이름·아이콘 같은 껍데기를 바꿀 때뿐입니다.
 
 `android/`(서명 키 포함)는 git에 올라가지 않습니다. 서명 키와 비밀번호를 잃으면 같은 앱으로 업데이트할 수 없으니 따로 보관하세요.
 
@@ -133,7 +137,9 @@ zipalign -f -p 4 <unsigned.apk> aligned.apk && apksigner sign --ks android.keyst
 
 - `npm test` — 단어 779 · 문법 340 · 레벨 테스트 72 · 고정 오답 후보 4,674개를 실제 채점 코드로 전부 풀어 봅니다: 정답·대체 정답·약형(I'm/I am)·음성 입력·아포스트로피 없는 입력, 빈칸 자리표시에 정답 노출, 보기 뜻 겹침, 하루치 패턴 분산, 레벨 판정 규칙.
 - 모든 문항은 정답을 모르는 상태에서 푸는 **블라인드 풀이**를 거쳤고, 4지선다 후보는 하나씩 검수해 지적 0건까지 교체했습니다.
-- 문항 수정: `node test/patch-items.mjs '{"<id>":{...}}'` → 유의어가 바뀌면 `node test/build-distractors.mjs` → `npm test`.
+- 4지선다 보기(`content/distractors.json`): 단어마다 `{en, ko}` 후보 6개(철자가 닮은 함정 3개 이상), 정답과 같은 레벨 이상만. 쉬운 레벨 단어는 철자가 닮은 함정일 때만 허용하고, 뜻이 겹치면 테스트가 실패합니다.
+- 너무 쉬운 단어는 지우지 않고 `content/hidden.json`에 넣어 숨깁니다(목록에서 빼면 다시 나옴). 내 레벨보다 쉬운 문제는 새 문제·복습·오답노트에 나오지 않습니다.
+- 문항 수정: `node test/patch-items.mjs '{"<id>":{...}}'` → 뜻·유의어가 바뀌면 `content/distractors.json`의 그 단어 후보도 확인 → `npm test`.
 - 블라인드 문제지 만들기: `node test/export-blind.mjs <out.txt> <content 파일...>`, 답안 채점: `node test/content.mjs <답안.json>`.
 
 ## 학습 설계 근거

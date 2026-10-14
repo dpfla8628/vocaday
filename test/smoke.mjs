@@ -41,6 +41,18 @@ const board = (await call('board')).data;
 assert.deepEqual(board.users.map(u => u.id).sort(), [ID, ID2].sort());
 
 assert.equal((await call('settings', { level: 9, plan: 'normal' })).status, 400);
+// 내 레벨보다 쉬운 문제(복습 포함)는 나오지 않는다
+const before = me.level;
+assert.equal((await call('settings', { level: 3, plan: 'normal' })).status, 200);
+const hi = (await call('session?kind=word')).data.items;
+assert.ok(hi.length && hi.every(x => x.lv >= 3), `레벨 3인데 쉬운 단어가 나옴: ${hi.filter(x => x.lv < 3).map(x => x.en)}`);
+assert.ok((await call('wrongs')).data.items.every(x => x.id.startsWith('c-') || x.lv >= 3), '오답노트에 레벨보다 쉬운 문제');
+// 숨김 단어(dog·cat 등)는 1단계에서도 나오지 않는다
+assert.equal((await call('settings', { level: 1, plan: 'hard' })).status, 200);
+const HIDDEN = JSON.parse(readFileSync(new URL('../content/hidden.json', import.meta.url), 'utf8'));
+const lo = (await call('session?kind=word')).data.items;
+assert.ok(lo.every(x => !HIDDEN.includes(x.id)), `숨김 단어가 나옴: ${lo.filter(x => HIDDEN.includes(x.id)).map(x => x.en)}`);
+await call('settings', { level: before, plan: 'normal' });
 
 // 레벨 테스트: 문제에는 정답이 없고, 한 문항 채점은 고른 뒤에만 정답 번호를 준다
 const { items: pl } = (await call('placement')).data;
@@ -63,12 +75,19 @@ const c1 = (await call('diary/comment', { uid: ID, date: d0.today, text: 'first'
 const r1 = (await call('diary/comment', { uid: ID, date: d0.today, text: 'reply', parent: c1.id })).data.comments.at(-1);
 assert.equal(r1.parent, c1.id, '답글의 parent');
 assert.equal((await call('diary/comment', { uid: ID, date: d0.today, text: 'x', parent: r1.id })).status, 400, '답글에 답글은 안 됨');
+// 같은 댓글을 연달아 보내면(두 번 누름·재전송) 한 번만 저장, 줄바꿈은 살리고 빈 줄은 하나까지
+const dupBody = { uid: ID, date: d0.today, text: 'dup\n\n\n\nline' };
+await call('diary/comment', dupBody);
+const dd = (await call('diary/comment', dupBody)).data.comments.filter(c => c.text === 'dup\n\nline');
+assert.equal(dd.length, 1, '같은 댓글을 두 번 보내면 한 번만 저장');
+await call('diary/comment/delete', { uid: ID, date: d0.today, id: dd[0].id });
 const ed = (await call('diary/comment/edit', { uid: ID, date: d0.today, id: c1.id, text: 'first (edited)' })).data.comments.find(c => c.id === c1.id);
 assert.ok(ed.text === 'first (edited)' && ed.editedAt, '댓글 수정');
 const del = (await call('diary/comment/delete', { uid: ID, date: d0.today, id: c1.id })).data.comments;
 assert.ok(del.find(c => c.id === c1.id)?.deleted && del.some(c => c.id === r1.id), '답글 있는 댓글은 자리만 남고 답글은 유지');
 const del2 = (await call('diary/comment/delete', { uid: ID, date: d0.today, id: r1.id })).data.comments;
 assert.ok(!del2.some(c => c.id === r1.id), '답글 삭제');
+assert.ok(!del2.some(c => c.id === c1.id), '마지막 답글이 지워지면 삭제 댓글 자리도 사라짐');
 assert.ok((await call('board')).data.users.find(x => x.id === ID).diaryToday === true, '친구 화면용 오늘 일기 여부');
 
 // 푸시 알림: 구독 저장 → 친구가 댓글을 달면 알림이 쌓이고, 서비스 워커가 push/next 로 하나씩 가져간다
