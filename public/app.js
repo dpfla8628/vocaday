@@ -1196,6 +1196,7 @@ const ago = t => {
   if (m < 1) return '방금';
   if (m < 60) return `${m}분 전`;
   if (m < 24 * 60) return `${Math.floor(m / 60)}시간 전`;
+  if (m < 7 * 24 * 60) return `${Math.floor(m / 1440)}일 전`;
   const d = new Date(t);
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 };
@@ -1219,7 +1220,7 @@ function comments(e, me) {
   const n = cs.filter(c => !c.deleted).length;
   return `<div class="comments" data-uid="${e.uid}">
     <p class="chead">댓글${n ? ` <b>${n}</b>` : ''}</p>${thread}
-    <form class="cform"><textarea rows="1" maxlength="300" placeholder="댓글을 남겨 보세요" aria-label="댓글"></textarea><div class="cbtns"><button class="btn primary sm">등록</button></div></form>
+    <form class="cform"><textarea rows="1" maxlength="300" placeholder="${n ? '댓글을 남겨 보세요' : '첫 댓글을 남겨 보세요'}" aria-label="댓글"></textarea><div class="cbtns"><button class="btn primary sm">등록</button></div></form>
     <p class="small cmsg" role="status"></p></div>`;
 }
 

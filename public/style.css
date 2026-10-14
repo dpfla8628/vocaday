@@ -324,7 +324,7 @@ details summary { cursor: pointer; color: var(--primary); font-weight: 700; font
 .cmeta { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 12px; color: var(--sub); }
 .cmeta b { color: var(--text); font-size: 14px; }
 .comment.mine .cmeta b { color: var(--primary); }
-.ctext { margin: 0; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ctext { margin: 0; font-size: 16px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .comment.deleted .ctext { color: var(--sub); font-size: 14px; padding-top: 3px; }
 /* 글자 버튼은 작게 보여도 누르는 자리는 넉넉하게(높이 32px) */
 .cactions { display: flex; margin: -4px 0 -6px -8px; }
