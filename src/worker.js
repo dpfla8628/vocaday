@@ -447,15 +447,22 @@ async function api(req, env, url) {
       }
       e.review = review;
       await put(env, k, e);
-      // 내 실수로 만든 복습 문제 → 내일부터 문법 복습에 등장(오답노트에도 보임)
-      u.custom ??= {};
-      review.practice.forEach((p, i) => {
-        const id = `c-${t}-${i}`;
-        u.custom[id] = { id, lv: u.level, tag: '내 일기 복습', s: p.s, ko: p.ko, alt: [], bank: p.bank, tip: p.tip || '내 일기에서 고친 표현' };
-        u.items[id] ??= { box: 0, right: 0, wrong: 1, first: t, due: addDays(t, 1), last: t };
-      });
       await saveUser();
       return json({ review, checksLeft: DIARY_CHECKS - u.diaryChecks[t] });
+    }
+    case 'POST /api/diary/practice': {
+      // 첨삭에서 고른 복습 문제만 오답노트에 넣는다 → 내일부터 문법 복습에 등장
+      const t = today();
+      const i = Number(body.i);
+      const r = (await get(env, `diary:${u.id}:${t}`))?.review;
+      const p = r?.practice?.[i];
+      if (!p) throw err(400, '첨삭을 다시 받아 주세요');
+      const id = `c-${t}-${r.at}-${i}`; // 다시 첨삭받아도 앞서 넣은 문제를 덮어쓰지 않게
+      u.custom ??= {};
+      u.custom[id] = { id, lv: u.level, tag: '내 일기 복습', s: p.s, ko: p.ko, alt: [], bank: p.bank, tip: p.tip || '내 일기에서 고친 표현' };
+      u.items[id] = { box: 0, right: 0, wrong: 1, first: t, due: addDays(t, 1), last: t };
+      await saveUser();
+      return json({ id });
     }
     case 'POST /api/diary/comment': {
       const text = commentText(body.text);
@@ -516,6 +523,16 @@ async function api(req, env, url) {
         .sort((a, b) => b[1].wrong - a[1].wrong)
         .map(([id, s]) => ({ ...itemOf(u, id), ...s, leech: s.wrong >= LEECH }));
       return json({ items });
+    }
+    case 'POST /api/wrongs/delete': {
+      // 오답노트에서 빼기: 일기 복습 문제는 통째로 지우고, 기본 문제는 틀린 기록만 지운다(복습 일정은 유지)
+      const id = String(body.id || '');
+      const s = u.items[id];
+      if (!s) throw err(404, '없는 문제예요');
+      if (id.startsWith('c-')) delete u.items[id], delete u.custom?.[id];
+      else s.wrong = 0;
+      await saveUser();
+      return json({});
     }
   }
   throw err(404, 'not found');

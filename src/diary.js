@@ -42,7 +42,11 @@ export async function languageTool(text) {
     });
     if (!r.ok) return [];
     const { matches = [] } = await r.json();
-    return matches.slice(0, 15).map(m => ({
+    return matches
+      .filter(m => m.rule?.category?.id !== 'CASING' && !(m.rule?.category?.id === 'TYPOS' && /^[A-Z]/.test(text.substr(m.offset, m.length)))) // 대소문자·이름(대문자로 시작하는 철자 지적)은 버린다
+      .filter(m => !trivial(text.substr(m.offset, m.length), m.replacements?.[0]?.value ?? ''))
+      .slice(0, 15)
+      .map(m => ({
       text: text.substr(m.offset, m.length),
       fix: m.replacements?.slice(0, 3).map(x => x.value) ?? [],
       kind: m.rule?.category?.id === 'TYPOS' ? 'spelling' : 'grammar',
@@ -53,12 +57,28 @@ export async function languageTool(text) {
   }
 }
 
+// 대소문자만 다르거나 줄임말(I'm ↔ I am, dont ↔ don't)만 다른 수정은 실수로 치지 않는다
+const EXPAND = [[/\bcan't\b/g, 'can not'], [/\bwon't\b/g, 'will not'], [/n't\b/g, ' not'], [/'m\b/g, ' am'], [/'re\b/g, ' are'], [/'s\b/g, ' is'], [/'ll\b/g, ' will'], [/'ve\b/g, ' have'], [/'d\b/g, ' would'], [/\bcannot\b/g, 'can not']];
+// 아포스트로피를 빼도 다른 단어라 진짜 실수인 것(its ↔ it's 등)
+const REAL = new Set(['its', 'were', 'well', 'ill', 'shed', 'lets', 'wed', 'hell', 'shell', 'id', 'hed']);
+const words = s => s.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+export function trivial(a, b) {
+  const x = words(a);
+  const y = words(b);
+  if (x.join(' ') === y.join(' ')) return true; // 대소문자·문장부호만 다름
+  const flat = ws => ws.map(w => w.replace(/'/g, '')).join(' ');
+  if (flat(x) === flat(y) && !x.concat(y).some(w => REAL.has(w.replace(/'/g, '')))) return true; // dont ↔ don't
+  const ex = ws => EXPAND.reduce((t, [re, to]) => t.replace(re, to), ws.join(' ')).replace(/\s+/g, ' ');
+  return ex(x) === ex(y); // I'm ↔ I am
+}
+
 const LEVELS = { 1: '초등(왕초보)', 2: '중학생 수준', 3: '고등학생 수준', 4: '성인 중상급' };
 
 export function buildMessages(text, level, lt) {
   const system = `너는 한국인 성인을 가르치는 친절한 원어민 영어 선생님이야. 학습자(${LEVELS[level] || '중학생 수준'})가 쓴 짧은 영어 일기를 첨삭해.
 원칙:
 - 칭찬을 먼저, 고칠 점은 의미·문법상 중요한 것 위주로 최대 5개. 사소한 취향 차이는 고치지 마.
+- 대소문자, 줄임말(I'm/I am, don't/do not, gonna 등), 사람 이름·고유명사는 절대 고치지 마. edits·practice에도 넣지 마.
 - 괄호 안에 쓴 한국어(예: "(산책)")는 문맥에 맞는 자연스러운 영어로 바꿔 corrected에 반영하고 translations에 적어.
 - 설명(why, tip, praise)은 모두 한국어로 짧고 쉽게.
 - better는 학습자 레벨에 맞는, 원어민이 실제로 쓰는 표현 1~2개.
@@ -89,7 +109,9 @@ export function sanitizeReview(raw, text) {
   const TYPES = ['spelling', 'grammar', 'natural'];
   const edits = arr(o.edits)
     .map(e => ({ from: str(e?.from, 80), to: str(e?.to, 80), type: TYPES.includes(e?.type) ? e.type : 'natural', why: str(e?.why, 140) }))
-    .filter(e => (e.from || e.to) && e.from !== e.to && e.why)
+    .filter(e => (e.from || e.to) && e.from !== e.to && e.why && !trivial(e.from, e.to))
+    // ponytail: 대문자로 시작하는 한 단어 철자 지적은 이름으로 본다(대문자 오타 Englsh도 같이 빠지는 한계)
+    .filter(e => !(e.type === 'spelling' && /^[A-Z][a-z]*$/.test(e.from)))
     .slice(0, 6);
   const practice = arr(o.practice)
     .map(p => ({ s: str(p?.s, 160), ko: str(p?.ko, 120), tip: str(p?.tip, 60), bank: arr(p?.bank).map(b => str(b, 24)).filter(b => b && !/\s/.test(b)) }))
@@ -102,7 +124,8 @@ export function sanitizeReview(raw, text) {
       return p.bank.length >= 2;
     })
     .slice(0, 2);
-  const corrected = str(o.corrected, 800) || text;
+  const c = str(o.corrected, 800);
+  const corrected = c && !trivial(c, text) ? c : text; // 대소문자·줄임말만 바뀐 교정문은 원문 그대로
   return {
     praise: str(o.praise, 160),
     corrected,

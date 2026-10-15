@@ -596,6 +596,7 @@ async function wrongs(kind = 'word') {
               : `<span>${esc(blankParts(x.s)[0])}<u>${esc(blankParts(x.s)[1])}</u>${esc(blankParts(x.s)[2])}</span><br><span class="sub">${esc(x.ko)}</span>`
           }</div>
           <div class="wmeta">${x.leech ? '<span class="chip warn">약점</span>' : ''}<span class="chip">${x.wrong}회</span><small>다음 ${x.due.slice(5).replace('-', '/')}</small></div>
+          <button class="iconbtn w-del" data-id="${esc(x.id)}" aria-label="오답노트에서 삭제">✕</button>
         </li>`,
         )
         .join('')}</ul>`
@@ -603,6 +604,14 @@ async function wrongs(kind = 'word') {
     }
   </section>
   ${tabs('wrongs')}`;
+  document.querySelectorAll('.w-del').forEach(
+    b =>
+      (b.onclick = async () => {
+        if (!confirm('오답노트에서 삭제할까요?')) return;
+        await api('wrongs/delete', { id: b.dataset.id });
+        wrongs(kind);
+      }),
+  );
 }
 
 // ---------- 친구 ----------
@@ -929,13 +938,15 @@ async function placement() {
 function wordDiff(a, b) {
   const x = a.split(/\s+/).filter(Boolean);
   const y = b.split(/\s+/).filter(Boolean);
+  const key = w => w.toLowerCase().replace(/['’]/g, '');
+  const same = (p, q) => key(p) === key(q); // 대소문자·아포스트로피만 다른 건(i → I, Im → I'm) 고친 걸로 보이지 않게
   const L = Array.from({ length: x.length + 1 }, () => new Array(y.length + 1).fill(0));
-  for (let i = x.length - 1; i >= 0; i--) for (let j = y.length - 1; j >= 0; j--) L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  for (let i = x.length - 1; i >= 0; i--) for (let j = y.length - 1; j >= 0; j--) L[i][j] = same(x[i], y[j]) ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
   const out = [];
   let i = 0;
   let j = 0;
   while (i < x.length || j < y.length) {
-    if (i < x.length && j < y.length && x[i] === y[j]) out.push(esc(x[i++])), j++;
+    if (i < x.length && j < y.length && same(x[i], y[j])) out.push(esc(x[i++])), j++;
     else if (i < x.length && (j >= y.length || L[i + 1][j] >= L[i][j + 1])) out.push(`<del>${esc(x[i++])}</del>`); // 지운 말 먼저
     else out.push(`<ins>${esc(y[j++])}</ins>`);
   }
@@ -983,7 +994,16 @@ function reviewView(text, r) {
     ${edits.length ? `<ul class="edits">${edits.join('')}</ul>${edits.length > 3 ? `<button class="btn ghost more-btn">수정 ${edits.length - 3}개 더 보기</button>` : ''}` : ''}
     ${r.translations.length ? `<div class="box"><h4>🗣️ 이렇게 말하면 돼요</h4>${r.translations.map(t => `<p>(${esc(t.ko)}) → <b>${esc(t.en)}</b></p>`).join('')}</div>` : ''}
     ${r.better.length ? `<div class="box"><h4>✨ 원어민 추천 표현</h4>${r.better.map(b => `<p><b>${esc(b.en)}</b><br><span class="small">${esc(b.ko)}</span></p>`).join('')}</div>` : ''}
-    ${r.practice.length ? `<p class="small">📌 내 실수로 만든 복습 문제 ${r.practice.length}개가 내일 문법 복습에 나와요.</p>` : ''}
+    ${
+      r.practice.length
+        ? `<div class="box"><h4>📌 복습 문제로 만들까요?</h4><p class="small">오답노트에 넣으면 내일부터 문법 복습에 나와요.</p>${r.practice
+            .map((p, i) => {
+              const [a, b, c] = blankParts(p.s);
+              return `<div class="row between"><p>${esc(a)}<u>${esc(b)}</u>${esc(c)}<br><span class="small">${esc(p.ko)}</span></p><button class="btn sm add-practice" data-i="${i}">오답노트에 추가</button></div>`;
+            })
+            .join('')}</div>`
+        : ''
+    }
     ${r.corrected && r.corrected !== text ? '<button class="btn" id="useFix">✍️ 첨삭문으로 고쳐 쓰기</button>' : ''}
     <p class="small">첨삭은 지금만 보여요. 고쳐서 저장하면 사라져요.</p>
   </div>`;
@@ -1148,6 +1168,19 @@ async function diary(date) {
     $('#review').innerHTML = r ? reviewView(text, r) : '';
     if (!r) return;
     document.querySelectorAll('.more-btn').forEach(b => (b.onclick = () => (b.previousElementSibling.classList.add('all'), b.remove())));
+    document.querySelectorAll('.add-practice').forEach(
+      b =>
+        (b.onclick = () =>
+          pending(b, b.parentElement, async () => {
+            try {
+              await api('diary/practice', { i: +b.dataset.i });
+              b.textContent = '추가됨 ✓';
+              b.disabled = true;
+            } catch (e) {
+              b.textContent = e.message;
+            }
+          })),
+    );
     $('#useFix')?.addEventListener('click', () => {
       draft = r.corrected;
       render('edit');

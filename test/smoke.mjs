@@ -33,6 +33,9 @@ assert.equal((await call('answer', { id: b.id, correct: false })).data.box, 0);
 
 const wrongs = (await call('wrongs')).data.items;
 assert.ok(wrongs.some(x => x.id === b.id), '틀린 문제가 오답노트에 없음');
+assert.equal((await call('wrongs/delete', { id: b.id })).status, 200);
+assert.ok(!(await call('wrongs')).data.items.some(x => x.id === b.id), '오답노트 삭제가 안 됨');
+assert.equal((await call('diary/practice', { i: 9 })).status, 400, '없는 복습 문제는 추가 안 됨');
 
 const after = (await call('session?kind=word')).data.items.map(x => x.id);
 assert.ok(!after.includes(a.id) && !after.includes(b.id), '오늘 푼 문제가 다시 큐에 들어옴');
