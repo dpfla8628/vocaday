@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 // 계정은 .dev.vars의 USERS(JSON)에서 읽는다 — 저장소에 아이디·비밀번호를 두지 않는다
 const USERS = JSON.parse(/^USERS=(.*)$/m.exec(readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8'))[1]);
-const [[ID, { pw: PW }], [ID2, { pw: PW2 }]] = Object.entries(USERS);
+const [[ID, { pw: PW }], [ID2, { pw: PW2, name: NAME2 }]] = Object.entries(USERS);
 
 const BASE = process.argv[2] || 'http://localhost:8787';
 let cookie = '';
@@ -109,4 +109,10 @@ const n = (await call('push/next')).data;
 assert.ok(n.title?.includes('댓글') && n.body === 'notify me', `댓글 알림이 없음: ${JSON.stringify(n)}`);
 assert.deepEqual((await call('push/next')).data, {}, '알림은 한 번만 전달');
 assert.equal((await call('push/unsubscribe', { endpoint: fake.endpoint })).data.devices, 0);
+// @태그: 일기 주인이 아니어도 태그된 사람에게 '태그' 알림이 간다
+await call('diary/comment', { uid: ID, date: d0.today, text: `@${NAME2} look at this` });
+cookie = '';
+assert.equal((await call('login', { id: ID2, pw: PW2 })).status, 200);
+const tg = (await call('push/next')).data;
+assert.ok(tg.title?.includes('태그') && tg.body.includes('look'), `태그 알림이 없음: ${JSON.stringify(tg)}`);
 console.log('smoke ok');

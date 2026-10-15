@@ -94,6 +94,8 @@ const parseUsers = env => {
   }
 };
 const nameOf = id => USERS[id]?.name ?? id;
+// 댓글 속 '@이름' 태그 → 태그된 사용자 아이디들
+const mentionsIn = text => Object.keys(USERS).filter(id => text.includes('@' + nameOf(id)));
 const DIARY_CHECKS = 10; // 하루 첨삭 횟수(무료 AI 한도 보호)
 const withIds = cs => (cs ?? []).map(c => ({ ...c, id: c.id ?? String(c.at) })); // id가 없던 옛 댓글은 작성 시각을 id로
 
@@ -491,12 +493,16 @@ async function api(req, env, url) {
       if (e.comments.some(c => c.by === u.id && c.text === text && (c.parent ?? null) === parent && Date.now() - c.at < 10_000)) return json({ comments: e.comments });
       e.comments.push({ id: randomHex(6), by: u.id, name: nameOf(u.id), text, at: Date.now(), ...(parent ? { parent } : {}) });
       await put(env, k, e);
-      // 일기 주인과(답글이면) 원댓글 작성자에게 알림 — 내가 나에게는 X
+      // 일기 주인과(답글이면) 원댓글 작성자에게 알림 — 내가 나에게는 X. @태그된 사람은 '태그' 알림 하나만
+      const tagged = mentionsIn(text).filter(id => id !== u.id);
       const targets = new Set();
       if (owner !== u.id) targets.add(owner);
       const pc = parent && e.comments.find(c => c.id === parent);
       if (pc && pc.by !== u.id) targets.add(pc.by);
-      notifyLater(env, [...targets], { title: `💬 ${nameOf(u.id)}님의 ${parent ? '답글' : '댓글'}`, body: text.slice(0, 80), url: `/#/diary/${date}` });
+      tagged.forEach(id => targets.delete(id));
+      const url = `/#/diary/${date}`;
+      notifyLater(env, [...targets], { title: `💬 ${nameOf(u.id)}님의 ${parent ? '답글' : '댓글'}`, body: text.slice(0, 80), url });
+      notifyLater(env, tagged, { title: `📣 ${nameOf(u.id)}님이 나를 태그했어요`, body: text.slice(0, 80), url });
       return json({ comments: e.comments });
     }
     case 'POST /api/diary/comment/edit':
@@ -516,8 +522,12 @@ async function api(req, env, url) {
       if (route.endsWith('/edit')) {
         const text = commentText(body.text);
         if (!text) throw err(400, '내용을 써 주세요');
+        // 고치면서 새로 태그한 사람에게만 알림
+        const before = mentionsIn(c.text);
+        const added = mentionsIn(text).filter(id => id !== u.id && !before.includes(id));
         c.text = text;
         c.editedAt = Date.now();
+        notifyLater(env, added, { title: `📣 ${nameOf(u.id)}님이 나를 태그했어요`, body: text.slice(0, 80), url: `/#/diary/${date}` });
       } else if (e.comments.some(x => x.parent === id)) {
         c.deleted = true; // 답글이 달린 댓글은 자리만 남긴다
         c.text = '';

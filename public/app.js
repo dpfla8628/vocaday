@@ -1012,6 +1012,8 @@ function reviewView(text, r) {
 async function diary(date) {
   const d = await api('diary' + (date ? `?date=${date}` : ''));
   const isToday = d.date === d.today;
+  allNames = d.entries.map(e => e.name);
+  friendNames = d.entries.filter(e => e.uid !== d.me).map(e => e.name);
   const me = d.entries.find(e => e.uid === d.me);
   const others = d.entries.filter(e => e.uid !== d.me);
   const md = s => `${+s.slice(5, 7)}월 ${+s.slice(8)}일`;
@@ -1097,7 +1099,29 @@ async function diary(date) {
       const t = e.target;
       t.style.height = '';
       t.style.height = t.scrollHeight + t.offsetHeight - t.clientHeight + 'px'; // 테두리 두께까지
+      suggest(t);
     });
+    // @태그: '@'를 치면 친구 이름 버튼이 입력창 위에 뜨고, 누르면 '@이름 '으로 채운다(태그된 사람에게 알림)
+    const suggest = ta => {
+      const f = ta.closest('form');
+      const old = f.previousElementSibling?.classList.contains('mentions') ? f.previousElementSibling : null;
+      const q = /(^|\s)@([^\s@]*)$/.exec(ta.value.slice(0, ta.selectionStart));
+      const hits = q ? friendNames.filter(n => n.startsWith(q[2])) : [];
+      if (!hits.length) return old?.remove();
+      const bar = old ?? f.insertAdjacentElement('beforebegin', Object.assign(document.createElement('div'), { className: 'mentions' }));
+      bar.innerHTML = hits.map(n => `<button type="button" data-n="${esc(n)}">@${esc(n)}</button>`).join('');
+      bar.onpointerdown = e => e.preventDefault(); // 입력창 포커스(키보드) 유지
+      bar.onclick = e => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        const pos = ta.selectionStart;
+        const head = ta.value.slice(0, pos).replace(/@[^\s@]*$/, `@${b.dataset.n} `);
+        ta.value = head + ta.value.slice(pos);
+        ta.focus();
+        ta.setSelectionRange(head.length, head.length);
+        bar.remove();
+      };
+    };
     // 답글 · 내 댓글 수정 · 삭제(두 번 눌러 확정, 3초 지나면 원래대로)
     box.addEventListener('click', ev => {
       const b = ev.target.closest('.cactions button');
@@ -1242,6 +1266,10 @@ async function diary(date) {
 
 // 댓글: 댓글 → 답글 한 단계. 내 댓글은 수정·삭제 가능
 // 한 줄 머리(아바타 · 이름 · 시간) → 본문 → 글자 버튼(답글·수정·삭제). 답글은 부모 본문 줄에 맞춰 들여쓴다
+// @태그: 일기 화면에서 이름 목록을 채운다(친구 = 나 빼고). 댓글 속 '@이름'은 강조
+let friendNames = [];
+let allNames = [];
+const tagged = html => allNames.reduce((s, n) => s.split('@' + esc(n)).join(`<b class="tag">@${esc(n)}</b>`), html);
 const ago = t => {
   const m = Math.floor((Date.now() - t) / 60000);
   if (m < 1) return '방금';
@@ -1261,7 +1289,7 @@ function comments(e, me) {
         <div class="avatar sm" aria-hidden="true">${esc(c.name[0])}</div>
         <div class="cbody">
           <p class="cmeta"><b>${esc(c.name)}</b><time datetime="${new Date(c.at).toISOString()}">${ago(c.at)}</time>${c.editedAt ? '<span>수정됨</span>' : ''}</p>
-          <p class="ctext">${esc(c.text)}</p>
+          <p class="ctext">${tagged(esc(c.text))}</p>
           <div class="cactions">${!c.parent ? '<button type="button" class="c-reply">답글</button>' : ''}${c.by === me ? '<button type="button" class="c-edit">수정</button><button type="button" class="c-del">삭제</button>' : ''}</div>
         </div></div>`;
   const thread = cs
@@ -1271,7 +1299,7 @@ function comments(e, me) {
   const n = cs.filter(c => !c.deleted).length;
   return `<div class="comments" data-uid="${e.uid}">
     <p class="chead">댓글${n ? ` <b>${n}</b>` : ''}</p>${thread}
-    <form class="cform"><textarea rows="1" maxlength="300" placeholder="${n ? '댓글을 남겨 보세요' : '첫 댓글을 남겨 보세요'}" aria-label="댓글"></textarea><div class="cbtns"><button class="btn primary sm">등록</button></div></form>
+    <form class="cform"><textarea rows="1" maxlength="300" placeholder="${n ? '댓글을 남겨 보세요' : '첫 댓글을 남겨 보세요'} (@로 친구 태그)" aria-label="댓글"></textarea><div class="cbtns"><button class="btn primary sm">등록</button></div></form>
     <p class="small cmsg" role="status"></p></div>`;
 }
 
