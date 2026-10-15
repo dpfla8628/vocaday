@@ -1043,7 +1043,7 @@ async function diary(date) {
         o.text
           ? `<p class="entry-text">${esc(o.text)}</p>${comments(o, d.me)}`
           : `<div class="row between"><p class="sub">아직 ${isToday ? '오늘 ' : ''}일기를 안 썼어요</p>${
-              isToday ? `<button class="btn sm nudge" data-uid="${esc(o.uid)}" ${d.nudged.includes(o.uid) ? 'disabled' : ''}>${d.nudged.includes(o.uid) ? '알림 보냄 ✓' : '🔔 일기 쓰라고 알림'}</button>` : ''
+              isToday ? `<button class="btn sm nudge" data-uid="${esc(o.uid)}">🔔 일기 쓰라고 알림</button>` : ''
             }</div>`
       }
     </div>`,
@@ -1143,8 +1143,7 @@ async function diary(date) {
         pending(b, b.parentElement, async () => {
           try {
             await api('diary/nudge', { uid: b.dataset.uid });
-            b.textContent = '알림 보냄 ✓';
-            b.disabled = true;
+            b.textContent = '보냄 ✓ · 한 번 더'; // 여러 번 보낼 수 있다
           } catch (e) {
             b.textContent = e.message;
           }

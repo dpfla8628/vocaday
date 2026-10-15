@@ -415,7 +415,7 @@ async function api(req, env, url) {
         const e = v ? JSON.parse(v) : null;
         return { uid, name: nameOf(uid), text: e?.text ?? '', comments: withIds(e?.comments), updatedAt: e?.updatedAt ?? null };
       });
-      return json({ me: u.id, date, today: t, prompt: promptOf(date), maxLen: MAX_LEN, checksLeft: DIARY_CHECKS - (u.diaryChecks?.[t] ?? 0), nudged: u.nudged?.[t] ?? [], entries, days });
+      return json({ me: u.id, date, today: t, prompt: promptOf(date), maxLen: MAX_LEN, checksLeft: DIARY_CHECKS - (u.diaryChecks?.[t] ?? 0), entries, days });
     }
     case 'POST /api/diary': {
       const text = String(body.text ?? '').replace(/\r/g, '').trim();
@@ -465,15 +465,12 @@ async function api(req, env, url) {
       return json({ id });
     }
     case 'POST /api/diary/nudge': {
-      // 아직 오늘 일기를 안 쓴 친구에게 '일기 써' 알림. 한 사람에게 하루 한 번
+      // 아직 오늘 일기를 안 쓴 친구에게 '일기 써' 알림. 몇 번이든 보낼 수 있다
       const t = today();
       const to = String(body.uid || '');
       if (!USERS[to] || to === u.id) throw err(400, '없는 친구예요');
       if ((await get(env, `diary:${to}:${t}`))?.text) throw err(400, '벌써 일기를 썼어요');
-      if (u.nudged?.[t]?.includes(to)) throw err(429, '오늘은 이미 보냈어요');
       if (!(await subscriptions(env, to))?.length) throw err(400, `${nameOf(to)}님이 알림을 꺼 두었어요`);
-      u.nudged = { [t]: [...(u.nudged?.[t] ?? []), to] }; // 오늘 것만 남긴다
-      await saveUser();
       notifyLater(env, [to], { title: `🔔 ${nameOf(u.id)}님이 일기 쓰래요`, body: `오늘의 질문: ${promptOf(t).ko}`, url: '/#/diary' });
       return json({});
     }
