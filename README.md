@@ -4,32 +4,143 @@
 
 > A two-person daily English trainer: cloze-style vocab & grammar drills with typing/voice input, spaced-repetition review of mistakes, a 3-line diary with AI feedback, and a friend board. Runs on Cloudflare Workers (D1 + Workers AI), no frontend framework.
 
-## 화면
+<p align="center">
+  <img src="docs/screenshots/home.png" width="200">&nbsp;
+  <img src="docs/screenshots/word-feedback.png" width="200">&nbsp;
+  <img src="docs/screenshots/diary-review.png" width="200">
+</p>
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/screenshots/home.png" width="230"><br><sub>홈 — 오늘의 미션 · 일기 · 연속 기록 · 친구 현황</sub></td>
-    <td align="center"><img src="docs/screenshots/level-test.png" width="230"><br><sub>레벨 테스트 — 고르면 바로 채점, 정답·오답의 뜻까지</sub></td>
-    <td align="center"><img src="docs/screenshots/word-cloze.png" width="230"><br><sub>단어 — 문장 빈칸을 타자 또는 🎤 말로</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/word-feedback.png" width="230"><br><sub>단어 — 정답 확인, 발음 듣기</sub></td>
-    <td align="center"><img src="docs/screenshots/grammar-blocks.png" width="230"><br><sub>문법·표현 — 단어 블록을 눌러 빈칸 완성</sub></td>
-    <td align="center"><img src="docs/screenshots/wrongs.png" width="230"><br><sub>오답노트 — 맞힐 때까지 매일 다시</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/diary-write.png" width="230"><br><sub>3줄 영어 일기 — 막히는 단어는 (한국어)로</sub></td>
-    <td align="center"><img src="docs/screenshots/diary-review.png" width="230"><br><sub>AI 첨삭 — 칭찬 → 수정 표시 → 설명</sub></td>
-    <td align="center"><img src="docs/screenshots/diary-review-2.png" width="230"><br><sub>추천 표현 · 내 실수로 만든 복습 문제</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/diary-comments.png" width="230"><br><sub>서로의 일기에 댓글</sub></td>
-    <td align="center"><img src="docs/screenshots/friends.png" width="230"><br><sub>친구 — 오늘 진행 · 정답률 · 2주 기록 · 함께 연속</sub></td>
-    <td></td>
-  </tr>
-</table>
+## 📱 앱 가이드
 
-## 기능
+하루 10분, 순서대로 따라 하면 됩니다: **레벨 테스트 → 오늘의 미션(단어·문법) → 3줄 일기 → 친구와 서로 확인**.
+
+### 0. 설치하기
+
+| 기기 | 방법 |
+|---|---|
+| 🍎 **아이폰** | Safari로 앱 주소 열기 → 공유 버튼 → **홈 화면에 추가**. 알림은 홈 화면 앱(iOS 16.4+)에서만 와요. |
+| 🤖 **갤럭시** | 받은 APK를 설치하면 주소창 없는 앱으로 열려요. 알림은 크롬이 깔려 있어야 동작해요. |
+| 💻 **컴퓨터** | 브라우저로 그냥 열면 돼요. 화면 가운데에 휴대폰 크기로 보여요. |
+
+<p align="center"><img src="docs/screenshots/desktop-home.png" width="720"><br><sub>컴퓨터 브라우저에서 본 홈</sub></p>
+
+### 1. 레벨 테스트
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/level-test.png" width="240"></td>
+<td>
+
+처음 로그인하면 레벨 테스트부터 시작해요(24문제, 약 5분).
+
+- 보기를 고르면 **바로 채점**돼요. 정답은 초록, 내가 고른 오답은 빨강, 두 단어의 뜻도 같이 나와요.
+- 모르면 찍지 말고 **모르겠어요**를 누르세요. 그래야 레벨이 정확해요.
+- 결과는 '편하게 풀 수 있는 단계'로 정해지고, 설정에서 언제든 바꾸거나 다시 볼 수 있어요.
+
+</td></tr></table>
+
+### 2. 홈 — 오늘의 미션
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/home.png" width="240"></td>
+<td>
+
+홈에는 오늘 할 일이 다 모여 있어요.
+
+- **단어 · 문법·표현** 카드를 눌러 미션 시작. 새 문제와 복습할 문제 수가 보여요.
+- **오늘의 영어 일기**: 썼는지, 친구 댓글이 왔는지.
+- 오른쪽 위 🔥는 연속 학습일, 아래는 최근 2주 기록과 친구의 오늘 진행 상황.
+
+</td></tr></table>
+
+### 3. 단어 — 문장 빈칸 채우기
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/word-cloze.png" width="240"></td>
+<td width="250"><img src="docs/screenshots/word-feedback.png" width="240"></td>
+<td>
+
+- 한국어 해석을 보고 빈칸에 들어갈 단어를 **타자**로 쓰거나 **🎤 말로 답하기**.
+- 막히면 **힌트 보기**(첫 글자), 정말 모르겠으면 **정답 보기**.
+- 비슷한 뜻의 다른 단어를 쓰면 바로 틀리게 하지 않고 한 번 더 기회를 줘요.
+- 정답 화면에서 🔊를 누르면 발음을 들을 수 있어요.
+
+</td></tr></table>
+
+### 4. 문법·표현 — 블록 맞추기
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/grammar-blocks.png" width="240"></td>
+<td>
+
+- 아래 블록을 **순서대로 눌러** 빈칸을 채워요. 잘못 놓은 블록은 다시 누르면 빠져요.
+- 헷갈리는 오답 블록이 섞여 있어요(한국인이 자주 틀리는 형태).
+- 자신 있으면 **⌨️ 직접 쓰기**로 바꿔서 풀어도 돼요.
+
+</td></tr></table>
+
+### 5. 오답노트
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/wrongs.png" width="240"></td>
+<td>
+
+- 틀린 문제는 오답노트에 모이고, **맞힐 때까지 매일** 복습에 다시 나와요(맞힐수록 간격이 1→2→4→7→15→30일로 늘어요).
+- **오답 N개 지금 다시 풀기**로 한 번에 복습.
+- 필요 없는 항목은 오른쪽 **✕** 로 지울 수 있어요.
+
+</td></tr></table>
+
+### 6. 3줄 영어 일기 + AI 첨삭
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/diary-write.png" width="240"></td>
+<td width="250"><img src="docs/screenshots/diary-review.png" width="240"></td>
+<td>
+
+1. 오늘의 질문을 보고 영어로 2~3줄. 막히는 단어는 `(산책)`처럼 **한국어로 써도 돼요**.
+2. **✏️ 첨삭 받기**(하루 10번)를 누르면 20초쯤 뒤에 결과가 나와요.
+   - 👏 칭찬 → 고친 부분 표시(지운 말은 빨강, 고친 말은 초록) → 이유 설명
+   - 🗣️ 괄호 속 한국어를 영어로 어떻게 말하는지
+   - ✨ 원어민 추천 표현
+3. **✍️ 첨삭문으로 고쳐 쓰기**를 누르면 고친 문장이 입력창에 들어가요.
+
+대소문자, 줄임말(`I'm`/`I am`), 사람 이름은 틀린 걸로 치지 않아요.
+
+</td></tr></table>
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/diary-review-2.png" width="240"></td>
+<td width="250"><img src="docs/screenshots/diary-comments.png" width="240"></td>
+<td>
+
+**📌 복습 문제로 만들까요?**
+첨삭에서 내 실수로 만든 복습 문제가 나와요. 공부하고 싶은 것만 **오답노트에 추가**를 누르세요. 다음 날부터 문법 복습에 나와요.
+
+**💬 댓글**
+서로의 일기에 댓글과 답글을 달 수 있어요. 내 댓글은 고치거나 지울 수 있어요.
+
+**🔔 일기 쓰라고 알림**
+친구가 아직 오늘 일기를 안 썼으면 버튼 한 번으로 알림을 보낼 수 있어요(한 사람에게 하루 한 번).
+
+</td></tr></table>
+
+### 7. 친구
+
+<table><tr>
+<td width="250"><img src="docs/screenshots/friends.png" width="240"></td>
+<td>
+
+- 서로의 오늘 진행(단어·문법·일기), 연속 학습일, 7일 정답률, 최근 2주 기록.
+- 둘 다 미션을 끝낸 날이 이어지면 맨 위 **함께 연속** 🔥이 올라가요.
+
+</td></tr></table>
+
+### 8. 알림
+
+설정에서 **알림 켜기**를 하면 이런 알림이 와요: 친구의 댓글·답글, 친구가 미션을 끝냈을 때, 친구가 일기를 썼을 때, 친구가 "일기 쓰라고" 보낸 알림, 저녁 8시에 미션이 남아 있으면 리마인더.
+
+## 기능 (자세히)
+
 
 **레벨 테스트**
 - 풀 72문항(초등·중등·고등·실전 × 어휘·문법)에서 매번 24문제를 뽑고, 지난 회차 문제는 피합니다 — 공부한 뒤 다시 봐도 외운 답으로는 못 풀어요.
@@ -46,13 +157,16 @@
 - 하루치 문제는 문법 패턴이 번갈아 나오도록 뽑습니다(현재완료만 6개 연달아 ✗).
 
 **복습 (간격 반복)**
+- 오답노트 항목은 ✕로 지울 수 있습니다(일기에서 만든 문제는 통째로, 기본 문제는 틀린 기록만 지우고 복습 일정은 유지).
 - 틀린 문제는 같은 세션에서 3문제 뒤에 한 번 더, 그리고 다음 날부터 매일. 맞힐수록 1 → 2 → 4 → 7 → 15 → 30일로 간격이 늘고, 30일 상자를 통과하면 '완전 암기'.
 - 복습이 밀리면 그날은 새 문제를 쉬어 갑니다. 하루 학습량은 라이트/노멀/하드.
 
 **3줄 영어 일기**
 - 매일 질문 하나. 막히면 `(꾸준히)`처럼 한국어를 섞어 써도 됩니다.
 - **첨삭 받기**를 누르면 무료 맞춤법 검사기(LanguageTool)로 오류를 잡고 Cloudflare Workers AI(오픈 모델)가 한국어로 설명합니다: 칭찬 → 원문 대비 수정 표시 → 맞춤법/문법/자연스러움 분류 설명 → 괄호 속 한국어의 영어 표현 → 원어민 추천 표현.
-- 첨삭은 그 자리에서만 보이고, 고쳐서 저장하면 사라집니다. 내 실수로 만든 복습 문제가 다음 날 문법 복습에 섞여 나옵니다.
+- 첨삭은 그 자리에서만 보이고, 고쳐서 저장하면 사라집니다. 내 실수로 만든 복습 문제는 **오답노트에 추가**를 누른 것만 다음 날 문법 복습에 나옵니다.
+- 대소문자만·줄임말만(`I'm`↔`I am`, `dont`↔`don't`) 다른 지적과 사람 이름 철자 지적은 버립니다(`its`↔`it's` 같은 진짜 실수는 유지).
+- 친구가 아직 오늘 일기를 안 썼으면 **🔔 일기 쓰라고 알림**을 보낼 수 있습니다(한 사람에게 하루 한 번, 상대가 알림을 켰을 때만).
 - 저장한 일기는 게시글처럼 보이고, 서로 댓글·답글(한 단계)을 달고 내 댓글은 고치거나 지울 수 있습니다.
 - 등록·저장·첨삭을 누르면 그 버튼만 로딩 표시가 되고 같은 영역의 다른 버튼은 끝날 때까지 잠깁니다(여러 번 눌러도 한 번만 처리). 서버도 같은 사람이 10초 안에 보낸 같은 댓글은 한 번만 저장합니다.
 

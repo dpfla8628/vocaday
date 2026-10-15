@@ -101,6 +101,8 @@ while ((await call('push/next')).data.title); // 남아 있던 알림 비우기
 cookie = '';
 assert.equal((await call('login', { id: ID2, pw: PW2 })).status, 200);
 await call('diary/comment', { uid: ID, date: d0.today, text: 'notify me' });
+assert.equal((await call('diary/nudge', { uid: ID2 })).status, 400, '나 자신에게 일기 알림은 안 됨');
+assert.equal((await call('diary/nudge', { uid: ID })).status, 400, '이미 일기를 쓴 친구에게는 안 됨');
 cookie = '';
 assert.equal((await call('login', { id: ID, pw: PW })).status, 200);
 const n = (await call('push/next')).data;

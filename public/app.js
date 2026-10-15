@@ -1039,7 +1039,13 @@ async function diary(date) {
       .map(
         o => `<div class="card entry">
       <div class="ehead"><div class="avatar">${esc(o.name[0])}</div><b>${esc(o.name)}</b>${o.updatedAt ? `<span class="sub">${hm(o.updatedAt)}</span>` : ''}</div>
-      ${o.text ? `<p class="entry-text">${esc(o.text)}</p>${comments(o, d.me)}` : `<p class="sub">아직 ${isToday ? '오늘 ' : ''}일기를 안 썼어요</p>`}
+      ${
+        o.text
+          ? `<p class="entry-text">${esc(o.text)}</p>${comments(o, d.me)}`
+          : `<div class="row between"><p class="sub">아직 ${isToday ? '오늘 ' : ''}일기를 안 썼어요</p>${
+              isToday ? `<button class="btn sm nudge" data-uid="${esc(o.uid)}" ${d.nudged.includes(o.uid) ? 'disabled' : ''}>${d.nudged.includes(o.uid) ? '알림 보냄 ✓' : '🔔 일기 쓰라고 알림'}</button>` : ''
+            }</div>`
+      }
     </div>`,
       )
       .join('')}
@@ -1131,6 +1137,19 @@ async function diary(date) {
     });
   };
   document.querySelectorAll('.comments').forEach(bindComments);
+  document.querySelectorAll('.nudge').forEach(
+    b =>
+      (b.onclick = () =>
+        pending(b, b.parentElement, async () => {
+          try {
+            await api('diary/nudge', { uid: b.dataset.uid });
+            b.textContent = '알림 보냄 ✓';
+            b.disabled = true;
+          } catch (e) {
+            b.textContent = e.message;
+          }
+        })),
+  );
 
   // 내 일기: 저장된 글은 게시글처럼 보이고 '수정'을 눌러야 입력창이 열린다.
   // 첨삭은 '첨삭 받기'를 누른 동안만 보이고, 고쳐서 저장하면 사라진다(다시 들어와도 안 보임).
