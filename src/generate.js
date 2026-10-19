@@ -71,7 +71,7 @@ Examples:
 ${examples.map(x => JSON.stringify(x)).join('\n')}`;
 
 const REVIEW = `You are a strict reviewer of English quiz items for Korean learners. Check each item carefully.
-Set "ok": false if ANY of these is true: the English sentence is unnatural, ungrammatical or not how natives say it; the Korean translation is not faithful (added or missing information, a changed logical relation such as "and" rendered as "because", the same noun rendered two different ways, a word rendered in the wrong sense such as "heard" as "받아들여지다"); the Korean meaning or tip is inaccurate, awkward, has typos or non-Korean characters; the Korean meaning's form does not match the part of speech (e.g. an adjective glossed as a verb); the word is too rare, technical or slangy for a general learner; given the Korean meaning, the translation and the blank's letter count, another common word with the SAME number of letters fits equally well (the learner sees the letter count — e.g. outgoing glossed as 사교적인 fails because sociable also has 8 letters); (grammar) the blank does not contain the whole pattern named in the tag; (grammar) any wrong block could form a sentence natives would accept, even a nonstandard variant (e.g. least → "the least of two evils"), or is not a real English word.
+Set "ok": false if ANY of these is true: the English sentence is unnatural, ungrammatical or not how natives say it; the Korean translation is not faithful (added or missing information, a changed logical relation such as "and" rendered as "because", the same noun rendered two different ways, a word rendered in the wrong sense such as "heard" as "받아들여지다"); the Korean meaning or tip is inaccurate, awkward, has typos or non-Korean characters; the Korean meaning's form does not match the part of speech (e.g. an adjective glossed as a verb); the word is too rare, technical or slangy for a general learner; given the Korean meaning, the translation and the blank's letter count, another common word with the SAME number of letters fits equally well (the learner sees the letter count — e.g. outgoing glossed as 사교적인 fails because sociable also has 8 letters); (grammar) the blank does not contain the whole pattern named in the tag; (grammar) any wrong block could form a sentence natives would accept, even a nonstandard variant (e.g. least → "the least of two evils"), or — for a blank at the start of the sentence — could be reordered with the answer's words into a plain sentence (e.g. "Never have I seen" with block haven't → "I haven't seen ..."), or is not a real English word. An inflected form inside the braces (e.g. {narrowed down}) is normal and not a defect.
 For word items, list in "bad" the numbers of wrong options whose meaning is the same as or close to the answer (including variations of the same phrase), whose Korean gloss is wrong or imprecise for that word (e.g. resolved glossed as 단호한 — that is resolute), whose gloss has near-duplicate senses (반응하는, 즉각 반응하는), mixes an adverb or noun sense into an adjective gloss (하룻밤 사이의, 밤새), is an incomplete adnominal form (깜짝 놀랄), or includes a technical/accounting sense (outstanding = 미지불된), or which are too rare for a general learner (e.g. stubby). Also set "ok": false if the translation reads as translationese (unnatural Korean word order) or the tip does not match the tense/form used in the sentence. Spelling look-alikes that are common words with clearly different meanings are fine.
 Return ONLY a JSON object keyed by item number: {"0": {"ok": true, "bad": [], "why": ""}, ...}
 Items:`;
@@ -126,6 +126,9 @@ export async function generate(env, kind, lv, { items, EN, fixed }, n = 10) {
   const addWords = s => { for (const w of String(s ?? '').toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? []) known.add(w); };
   for (const x of items) { addWords(x.en); addWords(x.ex); addWords(x.s); (x.alt ?? []).forEach(addWords); (x.bank ?? []).forEach(addWords); (x.distractors ?? []).forEach(d => addWords(d.en)); }
   const tagsInBatch = new Set(); // 한 묶음 안에서 같은 패턴은 하나만
+  // 오답 후보의 기존 뜻풀이(고정 문항 + 이미 만든 AI 문항) — 같은 단어는 같은 풀이로
+  const gloss = new Map();
+  for (const x of items) for (const d of x.distractors ?? fixed[x.id] ?? []) if (d.en && !gloss.has(norm(d.en))) gloss.set(norm(d.en), d.ko);
   // 예시의 오답 후보는 고정 문항이라 6개뿐 → 10개를 달라는 지시와 헷갈리지 않게 예시에서는 뺀다
   const examples = sample(same, 2).map(x =>
     kind === 'word' ? { en: x.en, ko: x.ko, pos: x.pos, ex: x.ex, exKo: x.exKo } : { tag: x.tag, s: x.s, ko: x.ko, tip: x.tip, bank: x.bank },
@@ -162,6 +165,9 @@ export async function generate(env, kind, lv, { items, EN, fixed }, n = 10) {
       const family = (a, b) => ` ${norm(a)} `.includes(` ${norm(b)} `) || ` ${norm(b)} `.includes(` ${norm(a)} `); // come down with ⊂ come down with the flu
       for (const d of x.distractors) {
         const o = EN.get(d.en);
+        // 뜻풀이는 한 단어에 하나: 단어장에 있거나 다른 문항의 후보로 이미 쓰인 단어는 그 뜻을 그대로 쓴다(항목마다 다르게 풀이되는 것 방지)
+        const canon = o?.ko ?? gloss.get(norm(d.en));
+        if (canon) d.ko = canon;
         if (!d.en || !hangul(d.ko) || family(d.en, x.en) || ok.some(p => norm(p.en) === norm(d.en))) continue;
         if (sensesClash(senses(x.ko), senses(d.ko)) || ok.some(p => sensesClash(senses(p.ko), senses(d.ko)))) continue;
         if (o && (sensesClash(senses(x.ko), senses(o.ko)) || (o.lv < x.lv && !lookAlike(x.en, o.en)))) continue;

@@ -76,6 +76,15 @@ const ctx = kind => ({
   assert.equal(r2.items[0]?.distractors.length, 6);
   assert.ok(!r2.items[0].distractors.some(d => d.en === fixed[word.id][1].en), '검수에서 지적한 후보가 남음');
 }
+// 2-1b) 오답 후보가 단어장에 있는 단어면 뜻풀이는 단어장 것으로 통일된다
+{
+  const solve = (id, re, line) => (re ? letterOf(word.en, re, line) : ans(word.ex));
+  const other = WORDS.find(x => x.lv === 4 && x !== word && !fixed[word.id].some(d => d.en === x.en) && !x.en.includes(' '));
+  const made = { ...goodWord, distractors: [{ en: other.en, ko: '엉뚱한 뜻' }, ...fixed[word.id].slice(0, 5)] };
+  const r = await generate({ AI: fakeAI([made], solve) }, 'word', 4, ctx('word'));
+  const d = r.items[0]?.distractors.find(d => d.en === other.en);
+  assert.ok(d && d.ko === other.ko, `후보 뜻이 단어장과 통일되지 않음: ${d?.ko} ≠ ${other.ko} (${JSON.stringify(r.reasons)})`);
+}
 // 2-2) 생성 모델이 자주 내는 실수는 규칙으로 미리 거른다
 {
   const solve = (id, re, line) => (re ? letterOf(word.en, re, line) : ans(word.ex));
