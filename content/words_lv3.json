@@ -428,7 +428,7 @@
   {"id":"w3-430","lv":3,"en":"typical","ko":"전형적인, ~다운","pos":"형","ex":"It's so {typical} of Jake to forget his homework again.","exKo":"숙제를 또 잊어버리다니 정말 제이크다워.","alt":[],"near":[]},
   {"id":"w3-431","lv":3,"en":"universal","ko":"보편적인, 전 세계의","pos":"형","ex":"Music is often called a {universal} language.","exKo":"음악은 흔히 보편적인 언어라고 불린다.","alt":[],"near":[]},
   {"id":"w3-432","lv":3,"en":"abstract","ko":"추상적인","pos":"형","ex":"Love is an {abstract} idea that is hard to define.","exKo":"사랑은 정의하기 어려운 추상적인 개념이다.","alt":[],"near":[]},
-  {"id":"w3-433","lv":3,"en":"concrete","ko":"구체적인, 확실한","pos":"형","ex":"The police don't have any {concrete} proof that he did it.","exKo":"경찰은 그가 그 일을 했다는 확실한 증거를 하나도 갖고 있지 않다.","alt":[],"near":["specific"]},
+  {"id":"w3-433","lv":3,"en":"concrete","ko":"구체적인, 확실한","pos":"형","ex":"The police don't have any {concrete} proof that he did it.","exKo":"경찰은 그가 그 일을 했다는 확실한 증거를 하나도 갖고 있지 않다.","alt":[],"near":["tangible","specific"]},
   {"id":"w3-434","lv":3,"en":"superficial","ko":"피상적인, 깊이 없는","pos":"형","ex":"Their conversation was polite but {superficial}.","exKo":"그들의 대화는 정중했지만 피상적이었다.","alt":[],"near":[]},
   {"id":"w3-435","lv":3,"en":"inferior","ko":"열등한, (~보다) 못한","pos":"형","ex":"This copy is clearly {inferior} to the original in quality.","exKo":"이 복제품은 품질 면에서 원본보다 확실히 못하다.","alt":[],"near":[]},
   {"id":"w3-436","lv":3,"en":"distinct","ko":"뚜렷한, 별개의","pos":"형","ex":"There's a {distinct} smell of gas in the kitchen.","exKo":"부엌에서 가스 냄새가 뚜렷하게 난다.","alt":[],"near":["definite"]},
