@@ -433,7 +433,7 @@
   {"id":"w3-435","lv":3,"en":"inferior","ko":"열등한, (~보다) 못한","pos":"형","ex":"This copy is clearly {inferior} to the original in quality.","exKo":"이 복제품은 품질 면에서 원본보다 확실히 못하다.","alt":[],"near":[]},
   {"id":"w3-436","lv":3,"en":"distinct","ko":"뚜렷한, 별개의","pos":"형","ex":"There's a {distinct} smell of gas in the kitchen.","exKo":"부엌에서 가스 냄새가 뚜렷하게 난다.","alt":[],"near":["definite"]},
   {"id":"w3-437","lv":3,"en":"ultimate","ko":"궁극적인, 최종적인","pos":"형","ex":"Our {ultimate} goal is to win the national championship.","exKo":"우리의 궁극적인 목표는 전국 대회 우승이다.","alt":[],"near":["eventual","final"]},
-  {"id":"w3-438","lv":3,"en":"barely","ko":"간신히, 거의 ~않다","pos":"부","ex":"We {barely} made it to the airport on time.","exKo":"우리는 간신히 제시간에 공항에 도착했다.","alt":["hardly"],"near":["hardly"]},
+  {"id":"w3-438","lv":3,"en":"barely","ko":"간신히, 거의 ~않다","pos":"부","ex":"We {barely} made it to the airport on time.","exKo":"우리는 간신히 제시간에 공항에 도착했다.","alt":["hardly"],"near":["seldom"]},
   {"id":"w3-439","lv":3,"en":"seemingly","ko":"겉보기에는, 외견상","pos":"부","ex":"The {seemingly} simple puzzle took me hours to solve.","exKo":"겉보기엔 간단해 보이던 퍼즐을 푸는 데 몇 시간이 걸렸다.","alt":[],"near":[]},
   {"id":"w3-440","lv":3,"en":"relatively","ko":"비교적, 상대적으로","pos":"부","ex":"The test was {relatively} easy this time.","exKo":"이번 시험은 비교적 쉬웠다.","alt":[],"near":[]},
   {"id":"w3-441","lv":3,"en":"increasingly","ko":"점점 더","pos":"부","ex":"It's becoming {increasingly} difficult to find cheap housing in the city.","exKo":"도시에서 저렴한 집을 구하기가 점점 더 어려워지고 있다.","alt":[],"near":[]},
