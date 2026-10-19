@@ -331,7 +331,7 @@
   {"id":"w2-330","lv":2,"en":"look after","ko":"돌보다","pos":"숙어","ex":"Can you {look after} my dog while I'm away this weekend?","exKo":"이번 주말에 내가 없는 동안 우리 개 좀 돌봐 줄래?","alt":[],"near":["take care of"]},
   {"id":"w2-331","lv":2,"en":"grow up","ko":"자라다, 성장하다","pos":"숙어","ex":"I {grew up} in a small town near the sea.","exKo":"나는 바닷가 근처 작은 마을에서 자랐어.","alt":[],"near":[]},
   {"id":"w2-332","lv":2,"en":"put on","ko":"입다, 착용하다","pos":"숙어","ex":"{Put on} your coat — it's freezing outside.","exKo":"코트 입어, 밖에 엄청 추워.","alt":[],"near":[]},
-  {"id":"w2-333","lv":2,"en":"turn off","ko":"끄다","pos":"숙어","ex":"Don't forget to {turn off} the lights when you leave.","exKo":"나갈 때 불 끄는 거 잊지 마.","alt":[],"near":["switch off"]},
+  {"id":"w2-333","lv":2,"en":"turn off","ko":"끄다","pos":"숙어","ex":"Don't forget to {turn off} the lights when you leave.","exKo":"나갈 때 불 끄는 거 잊지 마.","alt":[],"near":["switch off","shut off"]},
   {"id":"w2-334","lv":2,"en":"hang up","ko":"전화를 끊다","pos":"숙어","ex":"Don't {hang up} — I have one more thing to tell you.","exKo":"전화 끊지 마, 할 말 하나 더 있어.","alt":[],"near":[]},
   {"id":"w2-335","lv":2,"en":"look for","ko":"찾다","pos":"숙어","ex":"I'm {looking for} my car keys. Have you seen them?","exKo":"차 키 찾고 있는데, 혹시 봤어?","alt":[],"near":[]},
   {"id":"w2-336","lv":2,"en":"hand in","ko":"제출하다","pos":"숙어","ex":"Please {hand in} your essays by Friday.","exKo":"금요일까지 에세이를 제출하세요.","alt":[],"near":["submit","turn in","turned in"]},

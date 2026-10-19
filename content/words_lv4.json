@@ -254,7 +254,7 @@
   {"id":"w4-271","lv":4,"en":"take on","ko":"(일·책임을) 맡다, (직원을) 채용하다","pos":"숙어","ex":"I can't {take on} any more projects this month.","exKo":"이번 달엔 프로젝트를 더 맡을 수가 없어.","alt":[],"near":[]},
   {"id":"w4-272","lv":4,"en":"step down","ko":"(직책에서) 물러나다, 사임하다","pos":"숙어","ex":"The chairman will {step down} at the end of the year.","exKo":"회장은 연말에 자리에서 물러날 것이다.","alt":[],"near":[]},
   {"id":"w4-273","lv":4,"en":"fill in for","ko":"~을 대신하다, ~의 일을 대신 봐주다","pos":"숙어","ex":"Could you {fill in for} me at the meeting tomorrow? I have a dentist appointment.","exKo":"내일 회의에 나 대신 들어가 줄 수 있어? 치과 예약이 있어서.","alt":[],"near":["cover for"]},
-  {"id":"w4-274","lv":4,"en":"call in sick","ko":"전화로 병가를 내다","pos":"숙어","ex":"Half the team {called in sick} because of the flu.","exKo":"독감 때문에 팀원 절반이 아프다고 연락하고 결근했다.","alt":[],"near":[]},
+  {"id":"w4-274","lv":4,"en":"call in sick","ko":"전화로 병가를 내다","pos":"숙어","ex":"Half the team {called in sick} because of the flu.","exKo":"독감 때문에 팀원 절반이 아프다고 연락하고 결근했다.","alt":[],"near":["phoned in sick"]},
   {"id":"w4-275","lv":4,"en":"demographic","ko":"(특정) 인구 집단, 소비자층","pos":"명","ex":"Our main {demographic} is women in their twenties and thirties.","exKo":"우리의 주요 소비자층은 20~30대 여성이다.","alt":[],"near":[]},
   {"id":"w4-276","lv":4,"en":"promotional","ko":"홍보의, 판촉의","pos":"형","ex":"We're handing out {promotional} T-shirts at the trade fair.","exKo":"무역 박람회에서 홍보용 티셔츠를 나눠 주고 있어요.","alt":[],"near":[]},
   {"id":"w4-277","lv":4,"en":"niche","ko":"틈새(시장), 꼭 맞는 자리","pos":"명","ex":"The company found a profitable {niche} selling vegan pet food.","exKo":"그 회사는 비건 반려동물 사료를 팔며 수익성 있는 틈새시장을 찾았다.","alt":[],"near":[]},
