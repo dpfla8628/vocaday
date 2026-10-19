@@ -28,7 +28,7 @@ assert.ok(me.preview.word.new + me.preview.word.review > 0, '단어 큐가 비�
 const { items } = (await call('session?kind=word')).data;
 assert.ok(items.length > 0);
 const [a, b] = items;
-assert.equal((await call('answer', { id: a.id, correct: true })).data.box, 1);
+assert.equal((await call('answer', { id: a.id, correct: true })).data.box, 2, '처음 맞힌 문제는 바로 졸업');
 assert.equal((await call('answer', { id: b.id, correct: false })).data.box, 0);
 
 const wrongs = (await call('wrongs')).data.items;
@@ -37,8 +37,15 @@ assert.equal((await call('wrongs/delete', { id: b.id })).status, 200);
 assert.ok(!(await call('wrongs')).data.items.some(x => x.id === b.id), '오답노트 삭제가 안 됨');
 assert.equal((await call('diary/practice', { i: 9 })).status, 400, '없는 복습 문제는 추가 안 됨');
 
-const after = (await call('session?kind=word')).data.items.map(x => x.id);
-assert.ok(!after.includes(a.id) && !after.includes(b.id), '오늘 푼 문제가 다시 큐에 들어옴');
+// 답 여러 개 + 미션 완료를 동시에 보내도 기록이 덮어써지지 않는다(맞힌 문제가 새 문제로 다시 나오던 원인)
+const rest = items.slice(2, 6);
+await Promise.all([...rest.map(x => call('answer', { id: x.id, correct: true })), call('finish', { kind: 'word' })]);
+const after = (await call('session?kind=word')).data.items;
+for (const x of [a, b, ...rest]) assert.ok(!after.some(y => y.id === x.id), `푼 문제가 다시 큐에 들어옴: ${x.en}`);
+assert.ok(after.every((x, i) => i === 0 || !x.isNew || after[i - 1].isNew), '새 문제가 복습 문제보다 뒤에 나옴');
+const me2 = (await call('me')).data;
+assert.equal(me2.today.word.answered, 6, '동시 저장에서 푼 횟수가 사라짐');
+assert.ok(me2.today.word.done, '동시 저장에서 미션 완료가 사라짐');
 
 const board = (await call('board')).data;
 assert.deepEqual(board.users.map(u => u.id).sort(), [ID, ID2].sort());

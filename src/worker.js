@@ -36,9 +36,12 @@ const PLANS = {
   normal: { word: 15, grammar: 6, reviewCap: 100 },
   hard: { word: 30, grammar: 10, reviewCap: 200 },
 };
-// Leitner 상자별 다음 복습까지 일수. 틀리면 0번(내일 다시) → 맞힐수록 1·2·4·7·15·30일 뒤.
-const INTERVALS = [1, 1, 2, 4, 7, 15, 30];
-const MASTER_BOX = 6; // 30일 상자 도달 = 완전 암기
+// 처음 보고 맞힌 문제는 아는 문제 → 다시 안 낸다(사용자 결정 2026-10-19).
+// 틀린 문제만 복습: 틀리면 0번(내일) → 맞히면 1번(3일 뒤) → 한 번 더 맞히면 졸업. 다시 틀리면 0번부터.
+const INTERVALS = [1, 3];
+const MASTER_BOX = 2;
+// 옛 데이터(맞히기만 한 문제가 1~5번 상자에 남아 있음)도 졸업으로 친다
+const graduated = s => !s.wrong || s.box >= MASTER_BOX;
 const LEECH = 5; // 5번 이상 틀리면 '약점' 표시
 
 const TZ = 'Asia/Seoul';
@@ -70,6 +73,31 @@ const put = (env, k, v) =>
   env.DB.prepare('INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v')
     .bind(k, JSON.stringify(v))
     .run();
+// 사용자 기록은 JSON 하나라, 같은 사람의 요청이 겹치면(답 저장 직후 미션 완료 등) 나중 저장이 앞 기록을 덮어써
+// 맞힌 문제가 '새 문제'로 다시 나왔다. 그래서 읽은 뒤 누가 바꿨으면 최신 값에 내 변경분만 얹어 다시 저장한다.
+const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+function rebase(base, mine, theirs) {
+  for (const k of new Set([...Object.keys(base), ...Object.keys(mine)])) {
+    if (!(k in mine)) delete theirs[k];
+    else if (isObj(base[k]) && isObj(mine[k]) && isObj(theirs[k])) rebase(base[k], mine[k], theirs[k]);
+    else if (typeof base[k] === 'number' && typeof mine[k] === 'number' && typeof theirs[k] === 'number') theirs[k] += mine[k] - base[k]; // 횟수는 양쪽 증가분을 더한다
+    else if (JSON.stringify(base[k]) !== JSON.stringify(mine[k])) theirs[k] = mine[k];
+  }
+  return theirs;
+}
+async function saveMerged(env, k, u, base) {
+  for (let i = 0; i < 5; i++) {
+    const v = JSON.stringify(u);
+    const r = await env.DB.prepare('UPDATE kv SET v = ? WHERE k = ? AND v = ?').bind(v, k, base).run();
+    if (r.meta.changes) return v;
+    const cur = await env.DB.prepare('SELECT v FROM kv WHERE k = ?').bind(k).first('v');
+    const merged = rebase(JSON.parse(base), JSON.parse(v), JSON.parse(cur));
+    for (const x of Object.keys(u)) delete u[x];
+    Object.assign(u, merged);
+    base = cur;
+  }
+  throw err(503, '잠시 후 다시 시도해 주세요');
+}
 const del = (env, k) => env.DB.prepare('DELETE FROM kv WHERE k = ?').bind(k).run();
 
 async function hashPw(pw, salt) {
@@ -128,12 +156,12 @@ function queue(u, kind, mode) {
   const plan = PLANS[u.plan];
   const mine = Object.entries(u.items).filter(([id]) => itemOf(u, id)?.kind === kind && atLevel(u, id));
 
-  if (mode === 'wrong') return mine.filter(([, s]) => s.wrong > 0 && s.box < MASTER_BOX).map(([id]) => id);
+  if (mode === 'wrong') return mine.filter(([, s]) => !graduated(s)).map(([id]) => id);
 
   // 간격 대비 많이 밀린 것부터(relative overdueness)
   const overdue = s => (Date.parse(t) - Date.parse(s.due)) / 864e5 / INTERVALS[s.box];
   const due = mine
-    .filter(([, s]) => s.due <= t)
+    .filter(([, s]) => !graduated(s) && s.due <= t)
     .sort((a, b) => overdue(b[1]) - overdue(a[1]))
     .slice(0, plan.reviewCap)
     .map(([id]) => id);
@@ -167,13 +195,14 @@ function answer(u, id, correct) {
     day.new++;
   }
   if (correct) {
-    s.box = Math.min(s.box + 1, MASTER_BOX);
+    s.box = s.wrong ? s.box + 1 : MASTER_BOX;
     s.right++;
   } else {
     s.box = 0;
     s.wrong++;
   }
-  s.due = addDays(t, INTERVALS[s.box]);
+  if (graduated(s)) delete s.due;
+  else s.due = addDays(t, INTERVALS[s.box]);
   s.last = t;
   day.answered++;
   if (correct) day.correct++;
@@ -214,8 +243,8 @@ function stats(u) {
     streak: streakOf(d => complete(u.days[d])),
     today: u.days[t] ?? { word: emptyKind(), grammar: emptyKind() },
     learned: vals.length,
-    mastered: vals.filter(s => s.box >= MASTER_BOX).length,
-    wrongNote: Object.entries(u.items).filter(([id, s]) => itemOf(u, id) && atLevel(u, id) && s.wrong > 0 && s.box < MASTER_BOX).length,
+    mastered: vals.filter(graduated).length,
+    wrongNote: Object.entries(u.items).filter(([id, s]) => itemOf(u, id) && atLevel(u, id) && !graduated(s)).length,
     accuracy7: a7 ? Math.round((c7 / a7) * 100) : null,
     answered7: a7,
     history,
@@ -264,9 +293,10 @@ async function api(req, env, url) {
 
   const sid = /(?:^|;\s*)sid=([a-f0-9]+)/.exec(req.headers.get('Cookie') || '')?.[1];
   const uid = sid && (await get(env, 'sid:' + sid));
-  const u = uid && (await get(env, 'user:' + uid));
+  let raw = uid && (await env.DB.prepare('SELECT v FROM kv WHERE k = ?').bind('user:' + uid).first('v'));
+  const u = raw && JSON.parse(raw);
   if (!u) throw err(401, '로그인이 필요해요');
-  const saveUser = () => put(env, 'user:' + u.id, u);
+  const saveUser = async () => (raw = await saveMerged(env, 'user:' + u.id, u, raw));
 
   switch (route) {
     case 'POST /api/logout':
@@ -336,7 +366,10 @@ async function api(req, env, url) {
     case 'GET /api/session': {
       const kind = url.searchParams.get('kind');
       if (!BANK[kind]) throw err(400, 'bad kind');
-      const ids = shuffle(queue(u, kind, url.searchParams.get('mode')));
+      // 새 문제를 먼저, 틀렸던 문제(복습)는 뒤에. 각 묶음 안에서만 섞는다
+      const ids = queue(u, kind, url.searchParams.get('mode'));
+      const isNew = id => !u.items[id];
+      ids.splice(0, ids.length, ...shuffle(ids.filter(isNew)), ...shuffle(ids.filter(id => !isNew(id))));
       // 동의어를 쓴 경우 오답 대신 한 번 더 기회를 주려고 표제어 목록을 같이 보낸다
       return json({ items: ids.map(id => question(u, id)), headwords: kind === 'word' ? HEADWORDS : [] });
     }
@@ -539,13 +572,13 @@ async function api(req, env, url) {
     }
     case 'GET /api/wrongs': {
       const items = Object.entries(u.items)
-        .filter(([id, s]) => itemOf(u, id) && atLevel(u, id) && s.wrong > 0 && s.box < MASTER_BOX)
+        .filter(([id, s]) => itemOf(u, id) && atLevel(u, id) && !graduated(s))
         .sort((a, b) => b[1].wrong - a[1].wrong)
         .map(([id, s]) => ({ ...itemOf(u, id), ...s, leech: s.wrong >= LEECH }));
       return json({ items });
     }
     case 'POST /api/wrongs/delete': {
-      // 오답노트에서 빼기: 일기 복습 문제는 통째로 지우고, 기본 문제는 틀린 기록만 지운다(복습 일정은 유지)
+      // 오답노트에서 빼기: 일기 복습 문제는 통째로 지우고, 기본 문제는 틀린 기록만 지운다(= 아는 문제로 졸업, 다시 안 나옴)
       const id = String(body.id || '');
       const s = u.items[id];
       if (!s) throw err(404, '없는 문제예요');

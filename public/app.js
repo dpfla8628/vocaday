@@ -209,6 +209,7 @@ async function quiz(kind, mode) {
   const right = [];
   const wrong = [];
   let attempts = 0;
+  let saving = Promise.resolve(); // 답 저장을 순서대로 — 끝내기 전에 다 저장됐는지 기다린다
 
   next();
 
@@ -490,7 +491,8 @@ async function quiz(kind, mode) {
     if (!seen.has(it.id)) {
       seen.add(it.id);
       (ok ? right : wrong).push(it);
-      api('answer', { id: it.id, correct: ok }).catch(() => {});
+      const send = () => api('answer', { id: it.id, correct: ok });
+      saving = saving.then(send).catch(send).catch(() => {}); // 한 번 실패하면 한 번 더
     }
     beep(ok);
     const full = plain(kind === 'word' ? it.ex : it.s);
@@ -517,7 +519,7 @@ async function quiz(kind, mode) {
         ${(g === 'close' || g === 'bad') && typed ? `<p class="small">내 답: <s>${esc(typed)}</s>${formMiss ? ` → 이 문장에서는 <b>${esc(ans)}</b>(${esc(form)})${josa(ans, '이', '가')} 들어가요.` : ''}</p>` : ''}
         <p class="full"><button class="iconbtn" id="sayFull" aria-label="문장 듣기">${icon('speaker', 18)}</button>${esc(full)}</p>
         ${it.tip ? `<p class="tip">💡 ${esc(it.tip)}</p>` : ''}
-        ${ok ? '' : `<p class="small">${missed < MAX_MISSES ? '이 문제는 잠시 뒤에 한 번 더, 그리고 내일 다시 나와요.' : '오늘은 여기까지! 이 문제는 내일 복습에서 다시 만나요.'}</p>`}
+        ${ok ? '' : `<p class="small">${missed < MAX_MISSES ? '이 문제는 마지막에 한 번 더, 그리고 내일 다시 나와요.' : '오늘은 여기까지! 이 문제는 내일 복습에서 다시 만나요.'}</p>`}
         <button class="btn big ${ok ? 'success' : 'danger'}" id="cont">계속하기</button>
       </div>`;
     speak(full);
@@ -527,8 +529,8 @@ async function quiz(kind, mode) {
       if (moved) return; // 버튼 클릭 + Enter가 겹쳐 두 문제를 건너뛰지 않게
       moved = true;
       q.shift();
-      // 틀린 문제는 3문제 뒤에 한 번만 다시. 두 번 틀리면 오늘은 넘어간다(내일 복습에 이미 잡혀 있음)
-      if (!ok && missed < MAX_MISSES) q.splice(Math.min(3, q.length), 0, it);
+      // 틀린 문제는 맨 뒤에서 한 번만 다시. 두 번 틀리면 오늘은 넘어간다(내일 복습에 이미 잡혀 있음)
+      if (!ok && missed < MAX_MISSES) q.push(it);
       next();
     };
     $('#cont').onclick = cont;
@@ -544,6 +546,7 @@ async function quiz(kind, mode) {
 
   async function finish() {
     document.onkeydown = null;
+    await saving;
     if (!mode) await api('finish', { kind });
     const total = right.length + wrong.length;
     const acc = total ? Math.round((right.length / total) * 100) : 0;
