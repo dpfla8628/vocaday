@@ -44,10 +44,12 @@ const bankOf = kind => [...BANK[kind], ...GEN[kind]];
 // 맨 위 단계(실전)를 채운다 — 순서상 내 레벨 → 위 단계로 올라가므로 바닥나는 건 항상 맨 위다
 const GEN_MIN = 100;
 const GEN_LV = 4;
-// 하루 한 번, 무료 AI 한도(10,000뉴런/일)가 초기화되는 00:00 UTC 직후에 돈다 — 일기 첨삭과 한도를 나눠 쓰므로 자주 돌리지 않는다
-const GEN_CRON = '30 0 * * *';
+// 하루 한 번, 무료 AI 한도(10,000뉴런/일)가 초기화되는 00:00 UTC *직전*에 돈다 — 그날 일기 첨삭이 쓰고 남은 한도만 쓰므로
+// 첨삭이 생성 때문에 막히는 일이 없다(한도가 이미 바닥이면 생성만 조용히 실패)
+const GEN_CRON = '30 23 * * *';
 const GEN_N = 4; // 한 번에 만들 문제 수
-const GEN_BATCHES = 2; // Cron 한 번에 몇 번 부를지(종류마다)
+const GEN_BATCHES = 3; // Cron 한 번에 최대 몇 번 부를지(종류마다)
+const GEN_ENOUGH = 8; // 이만큼 모이면 그날은 그만
 async function refill(env) {
   await loadGen(env, true);
   const users = [];
@@ -60,8 +62,9 @@ async function refill(env) {
   for (const kind of ['word', 'grammar']) {
     const left = Math.min(...users.map(u => bankOf(kind).filter(x => !u.items[x.id] && !HIDDEN.has(x.id) && x.lv >= u.level).length));
     if (left >= (+env.GEN_MIN || GEN_MIN)) continue;
-    // Qwen은 한 번에 많이 시키면 2분 타임아웃 → 작은 묶음을 여러 번
-    for (let i = 0; i < (+env.GEN_BATCHES || GEN_BATCHES); i++) {
+    // Qwen은 한 번에 많이 시키면 2분 타임아웃 → 작은 묶음을 여러 번. 충분히 모이면 그만(한도 아끼기)
+    let made = 0;
+    for (let i = 0; i < (+env.GEN_BATCHES || GEN_BATCHES) && made < GEN_ENOUGH; i++) {
       try {
         const r = await generate(env, kind, GEN_LV, { items, EN, fixed: fixedDistractors }, GEN_N);
         for (const x of r.items) {
@@ -69,9 +72,11 @@ async function refill(env) {
           items.push(x);
           if (kind === 'word') EN.set(x.en, x);
         }
+        made += r.items.length;
         console.log(`gen ${kind} left=${left} ok=${r.items.length}/${r.tried} ${JSON.stringify(r.reasons)}`);
       } catch (e) {
         console.log(`gen ${kind} error ${e.message}`);
+        if (/4006|allocation|quota/i.test(e.message)) return; // 오늘 한도 끝 — 더 불러도 소용없다
       }
     }
   }
