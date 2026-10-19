@@ -54,8 +54,8 @@ Return ONLY a JSON array of ${targets.length} objects, no other text. Each objec
 - "pos": one of 명 동 형 부 전 접 숙어
 - "ex": one natural English sentence (lowercase except sentence start and proper nouns); the headword or its inflected form wrapped in {curly braces} exactly once
 - "exKo": natural Korean translation of "ex" (no English)
-- "distractors": exactly 10 objects {"en","ko"}: real English words that LOOK or SOUND similar to the headword (same part of speech if possible) but have clearly DIFFERENT meanings, with their correct Korean meaning
-Rules: knowing "ko", "exKo" and the letter count, only one word fits the blank. The headword must not appear elsewhere in the sentence. No distractor may mean the same as the headword or as another distractor.
+- "distractors": exactly 10 objects {"en","ko"}: COMMON English words a general learner may know (no rare words like stubby) that LOOK or SOUND similar to the headword (same part of speech if possible) but have clearly DIFFERENT meanings, each with its exact dictionary Korean meaning
+Rules: knowing "ko", "exKo" and the letter count, only one word fits the blank — choose the Korean meaning and the sentence so that no other common word with the SAME number of letters fits (e.g. do not gloss outgoing as 사교적인, since sociable also has 8 letters). The headword must not appear elsewhere in the sentence. No distractor may mean the same as the headword or as another distractor. "exKo" must be a faithful translation: same logical relations, no added or dropped information, the same word rendered consistently.
 Examples (distractors omitted here — you must include all 10):
 ${examples.map(x => JSON.stringify(x)).join('\n')}`;
 
@@ -65,14 +65,14 @@ Return ONLY a JSON array of ${n} objects, no other text. Each object:
 - "s": one natural English sentence with the WHOLE target pattern wrapped in {curly braces} exactly once (for "패턴: hold the line" the braces must contain "hold the line", not just "hold"); normal capitalization (capital only at sentence start)
 - "ko": natural Korean translation of "s"
 - "tip": Korean explanation of the pattern, under 40 characters
-- "bank": 2-3 tempting WRONG single words (no spaces, not words of the answer)
-Rule: knowing "tag" and "ko", only ONE fill is correct — avoid sentences where another word would also work. Use varied patterns.
+- "bank": 2-3 tempting WRONG single common words (no spaces, not words of the answer) that can NOT form any sentence natives would accept in the blank, not even a nonstandard variant (e.g. for "the lesser of two evils" do not offer "least")
+Rule: knowing "tag" and "ko", only ONE fill is correct — avoid sentences where another word would also work. "ko" must be a faithful translation (same logical relations, nothing added, the same noun rendered consistently). Use varied patterns.
 Examples:
 ${examples.map(x => JSON.stringify(x)).join('\n')}`;
 
 const REVIEW = `You are a strict reviewer of English quiz items for Korean learners. Check each item carefully.
-Set "ok": false if ANY of these is true: the English sentence is unnatural or ungrammatical; the Korean translation or meaning is inaccurate; the Korean meaning's form does not match the part of speech (e.g. an adjective glossed as a verb); the word is too rare, technical or slangy for a general learner; the tip is wrong; the Korean has typos or sounds unnatural; another common word or phrase would fit the blank equally well; (grammar) the blank does not contain the whole pattern named in the tag; (grammar) the wrong blocks could form a correct answer or are not real English words.
-For word items, list in "bad" the numbers of wrong options whose meaning is the same as or close to the answer (including variations of the same phrase), or whose Korean meaning is wrong. Spelling look-alikes with clearly different meanings are fine.
+Set "ok": false if ANY of these is true: the English sentence is unnatural, ungrammatical or not how natives say it; the Korean translation is not faithful (added or missing information, a changed logical relation such as "and" rendered as "because", the same noun rendered two different ways, a word rendered in the wrong sense such as "heard" as "받아들여지다"); the Korean meaning or tip is inaccurate, awkward, has typos or non-Korean characters; the Korean meaning's form does not match the part of speech (e.g. an adjective glossed as a verb); the word is too rare, technical or slangy for a general learner; given the Korean meaning, the translation and the blank's letter count, another common word with the SAME number of letters fits equally well (the learner sees the letter count — e.g. outgoing glossed as 사교적인 fails because sociable also has 8 letters); (grammar) the blank does not contain the whole pattern named in the tag; (grammar) any wrong block could form a sentence natives would accept, even a nonstandard variant (e.g. least → "the least of two evils"), or is not a real English word.
+For word items, list in "bad" the numbers of wrong options whose meaning is the same as or close to the answer (including variations of the same phrase), whose Korean gloss is wrong or imprecise for that word (e.g. resolved glossed as 단호한 — that is resolute), or which are too rare for a general learner (e.g. stubby). Spelling look-alikes that are common words with clearly different meanings are fine.
 Return ONLY a JSON object keyed by item number: {"0": {"ok": true, "bad": [], "why": ""}, ...}
 Items:`;
 
