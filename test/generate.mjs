@@ -81,10 +81,12 @@ const ctx = kind => ({
   const solve = (id, re, line) => (re ? letterOf(word.en, re, line) : ans(word.ex));
   const placeholder = { ...goodWord, en: 'come down with something', ex: 'I {come down with something} every winter.', pos: '숙어' };
   const verbNoun = { ...goodWord, en: 'zqscald', ex: 'The {zqscald} hurt.', pos: '명', ko: '뜨겁다, 화상을 입히다' };
-  const r = await generate({ AI: fakeAI([placeholder, verbNoun], solve) }, 'word', 4, ctx('word'));
+  const verbAdj = { ...goodWord, en: 'zqscalding', ex: 'The water is {zqscalding}.', pos: '형', ko: '뜨겁다, 화상을 입히다' };
+  const r = await generate({ AI: fakeAI([placeholder, verbNoun, verbAdj], solve) }, 'word', 4, ctx('word'));
   assert.equal(r.items.length, 0, JSON.stringify(r.reasons));
   assert.equal(r.reasons['표제어에 자리표시(something 등)'], 1);
   assert.equal(r.reasons['명사 뜻이 서술형'], 1);
+  assert.equal(r.reasons['형용사 뜻이 서술형'], 1);
   // 같은 구절 변형(come down with the flu)은 오답 후보에서 뺀다 → 6개가 안 되면 탈락
   const fam = { ...goodWord, en: 'zqcome down with', ex: "I think I'm {zqcoming down with} a cold.", pos: '숙어', ko: '(병에) 걸리다',
     distractors: [{ en: 'zqcome down with the flu', ko: '독감에 걸리다' }, { en: 'zqcome down with a fever', ko: '열이 나다' }, ...fixed[word.id].slice(0, 4)] };
@@ -93,9 +95,14 @@ const ctx = kind => ({
   const g = { tag: gram.tag, s: gram.s, ko: gram.ko, tip: gram.tip, bank: gram.bank };
   const partial = { ...g, tag: '패턴: hold the line', s: 'Please {hold} the line.', ko: '잠시만 기다려 주세요.', bank: ['wait', 'keep'] };
   const capital = { ...g, tag: '패턴: by the way', s: 'Hey, {By the way}, did you call?', ko: '야, 그런데 전화했어?', bank: ['On', 'At'] };
-  const r3 = await generate({ AI: fakeAI([partial, capital], () => 'x') }, 'grammar', 4, ctx('grammar'));
+  const nonword = { ...g, tag: '패턴: said ~ would', s: 'She said she {would} call me later.', ko: '그녀는 나중에 전화하겠다고 말했다.', bank: ['will', 'wouldly'] };
+  const dupTag = { ...g, tag: '패턴: said ~ would', s: 'He said he {would} be late.', ko: '그는 늦을 거라고 말했다.', bank: ['will', 'can'] };
+  const dupTag2 = { ...g, tag: '패턴: said ~ would', s: 'They said they {would} come.', ko: '그들은 오겠다고 말했다.', bank: ['will', 'can'] };
+  const r3 = await generate({ AI: fakeAI([partial, capital, nonword, dupTag, dupTag2], () => 'x') }, 'grammar', 4, ctx('grammar'));
   assert.equal(r3.reasons['빈칸에 패턴이 다 안 들어감'], 1, JSON.stringify(r3.reasons));
   assert.equal(r3.reasons['문장 중간 대문자'], 1, JSON.stringify(r3.reasons));
+  assert.equal(r3.reasons['오답 블록이 모르는 단어'], 1, JSON.stringify(r3.reasons));
+  assert.equal(r3.reasons['같은 패턴 중복'], 1, JSON.stringify(r3.reasons));
 }
 // 3) 문법: 좋은 것만 통과, 오답 블록이 정답과 겹치면 버림
 {

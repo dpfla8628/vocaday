@@ -84,7 +84,7 @@ function wordSmell(x) {
   const ss = x.ko.replace(/\(.*?\)/g, '').split(/[,/;]/).map(s => s.trim()).filter(Boolean); // senses()는 괄호 안 ·까지 쪼개서 여기선 안 씀
   if (x.pos === '동' && !ss.every(s => s.endsWith('다'))) return '동사 뜻이 ~다 꼴이 아님';
   if (x.pos === '명' && ss.some(s => /[가-힣]다$/.test(s) && !/(바다|소다|판다)$/.test(s))) return '명사 뜻이 서술형';
-  if (x.pos === '형' && ss.some(s => /(하다|되다|시키다|내다|주다|치다)$/.test(s) && !/(한|스럽|롭|답|같)[^가-힣]*다$/.test(s))) return '형용사 뜻이 동사형';
+  if (x.pos === '형' && ss.some(s => /[가-힣]다$/.test(s))) return '형용사 뜻이 서술형'; // 단어장 형용사 뜻은 전부 '~한/~인' 꼴(뜨겁다 ✗ → 몹시 뜨거운)
   return '';
 }
 function grammarSmell(x) {
@@ -121,6 +121,11 @@ function blindSheet(items) {
 export async function generate(env, kind, lv, { items, EN, fixed }, n = 10) {
   const same = items.filter(x => x.kind === kind && x.lv === lv);
   const seen = new Set(items.map(x => norm(kind === 'word' ? x.en ?? '' : plain(x.s ?? ''))));
+  // 단어장·예문에 한 번이라도 나온 영어 단어 = 아는 단어. 오답 블록이 여기 없으면(wouldly, wasn 같은 비단어) 버린다
+  const known = new Set();
+  const addWords = s => { for (const w of String(s ?? '').toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? []) known.add(w); };
+  for (const x of items) { addWords(x.en); addWords(x.ex); addWords(x.s); (x.alt ?? []).forEach(addWords); (x.bank ?? []).forEach(addWords); (x.distractors ?? []).forEach(d => addWords(d.en)); }
+  const tagsInBatch = new Set(); // 한 묶음 안에서 같은 패턴은 하나만
   // 예시의 오답 후보는 고정 문항이라 6개뿐 → 10개를 달라는 지시와 헷갈리지 않게 예시에서는 뺀다
   const examples = sample(same, 2).map(x =>
     kind === 'word' ? { en: x.en, ko: x.ko, pos: x.pos, ex: x.ex, exKo: x.exKo } : { tag: x.tag, s: x.s, ko: x.ko, tip: x.tip, bank: x.bank },
@@ -165,8 +170,13 @@ export async function generate(env, kind, lv, { items, EN, fixed }, n = 10) {
       x.distractors = ok;
       checkWord(x, m => fails.push(m));
       checkDistractors(x, x.distractors, { EN, overlap: () => false }, m => fails.push(m));
-    } else checkGrammar(x, m => fails.push(m));
+    } else {
+      if (x.bank.some(b => !known.has(b.toLowerCase()))) return reject('오답 블록이 모르는 단어');
+      if (tagsInBatch.has(norm(x.tag))) return reject('같은 패턴 중복');
+      checkGrammar(x, m => fails.push(m));
+    }
     if (fails.length) return reject('규칙: ' + fails[0].split(':')[0].slice(0, 20));
+    if (kind === 'grammar') tagsInBatch.add(norm(x.tag));
     seen.add(k);
     Object.assign(o, { _item: x });
     return true;
