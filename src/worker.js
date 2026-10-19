@@ -14,6 +14,7 @@ import { makePicker } from './distractors.js';
 import { placeLevel, PASS } from './placement.js';
 import { freshOrder } from './queue.js';
 import { MAX_LEN, promptOf, checkDiary } from './diary.js';
+import { generate } from './generate.js';
 import { notify, nextNotice, subscriptions, saveSubscriptions } from './push.js';
 
 const KIND_KO = { word: '단어', grammar: '문법' };
@@ -26,8 +27,55 @@ const GRAMMAR = [...g12, ...g34].map(x => ({ ...x, kind: 'grammar' }));
 const BANK = { word: WORDS, grammar: GRAMMAR };
 const BY_ID = new Map([...WORDS, ...GRAMMAR].map(x => [x.id, x]));
 // 공용 문항 + 내 일기에서 만든 복습 문항(u.custom)
-const itemOf = (u, id) => BY_ID.get(id) ?? (u.custom?.[id] && { ...u.custom[id], kind: 'grammar' });
+const itemOf = (u, id) => BY_ID.get(id) ?? GEN.byId.get(id) ?? (u.custom?.[id] && { ...u.custom[id], kind: 'grammar' });
 const HEADWORDS = WORDS.map(x => x.en);
+
+// AI가 만든 문제(D1 gen 표). 고정 문제 뒤에 붙어 새 문제가 바닥나지 않게 한다. 워커마다 1분 캐시
+let GEN = { at: 0, all: [], byId: new Map(), word: [], grammar: [] };
+async function loadGen(env, force) {
+  if (!force && Date.now() - GEN.at < 60e3) return;
+  const { results } = await env.DB.prepare('SELECT v FROM gen').all();
+  const all = results.map(r => JSON.parse(r.v));
+  const live = all.filter(x => !x.reported); // 신고된 문제는 안 내고, 같은 문제를 또 만들지 않게 기록만 남긴다
+  GEN = { at: Date.now(), all, byId: new Map(live.map(x => [x.id, x])), word: live.filter(x => x.kind === 'word'), grammar: live.filter(x => x.kind === 'grammar') };
+}
+const bankOf = kind => [...BANK[kind], ...GEN[kind]];
+// 누군가 내 레벨 이상에서 남은 새 문제가 이만큼 아래로 내려가면 Cron이 새로 만든다.
+// 맨 위 단계(실전)를 채운다 — 순서상 내 레벨 → 위 단계로 올라가므로 바닥나는 건 항상 맨 위다
+const GEN_MIN = 100;
+const GEN_LV = 4;
+// 하루 한 번, 무료 AI 한도(10,000뉴런/일)가 초기화되는 00:00 UTC 직후에 돈다 — 일기 첨삭과 한도를 나눠 쓰므로 자주 돌리지 않는다
+const GEN_CRON = '30 0 * * *';
+const GEN_N = 4; // 한 번에 만들 문제 수
+const GEN_BATCHES = 2; // Cron 한 번에 몇 번 부를지(종류마다)
+async function refill(env) {
+  await loadGen(env, true);
+  const users = [];
+  for (const uid of Object.keys(USERS)) {
+    const x = await get(env, 'user:' + uid);
+    if (x) users.push(x);
+  }
+  const items = [...WORDS, ...GRAMMAR, ...GEN.all];
+  const EN = new Map([...WORDS, ...GEN.word].map(w => [w.en, w]));
+  for (const kind of ['word', 'grammar']) {
+    const left = Math.min(...users.map(u => bankOf(kind).filter(x => !u.items[x.id] && !HIDDEN.has(x.id) && x.lv >= u.level).length));
+    if (left >= (+env.GEN_MIN || GEN_MIN)) continue;
+    // Qwen은 한 번에 많이 시키면 2분 타임아웃 → 작은 묶음을 여러 번
+    for (let i = 0; i < (+env.GEN_BATCHES || GEN_BATCHES); i++) {
+      try {
+        const r = await generate(env, kind, GEN_LV, { items, EN, fixed: fixedDistractors }, GEN_N);
+        for (const x of r.items) {
+          await env.DB.prepare('INSERT INTO gen (id, kind, lv, v) VALUES (?, ?, ?, ?)').bind(x.id, kind, x.lv, JSON.stringify(x)).run();
+          items.push(x);
+          if (kind === 'word') EN.set(x.en, x);
+        }
+        console.log(`gen ${kind} left=${left} ok=${r.items.length}/${r.tried} ${JSON.stringify(r.reasons)}`);
+      } catch (e) {
+        console.log(`gen ${kind} error ${e.message}`);
+      }
+    }
+  }
+}
 const pickDistractors = makePicker(WORDS, confusables);
 
 // 하루 신규 학습량 + 복습 상한. 복습이 상한만큼 밀려 있으면 새 문제는 쉬어 간다(Anki 권장 방식).
@@ -131,6 +179,7 @@ let ready;
 const init = env =>
   (ready ??= (async () => {
     await env.DB.prepare('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS gen (id TEXT PRIMARY KEY, kind TEXT NOT NULL, lv INTEGER NOT NULL, v TEXT NOT NULL)').run();
     for (const [id, { pw }] of Object.entries(USERS)) {
       if (await get(env, 'user:' + id)) continue;
       const salt = randomHex(16);
@@ -149,7 +198,16 @@ const complete = day => !!(day?.word.done && day?.grammar.done);
 // 내 레벨보다 쉬운 문제는 새 문제·복습·오답노트 모두에서 빼다(레벨을 올린 뒤 dog·cat 같은 게 다시 나오지 않게).
 // 내 일기에서 만든 복습 문제(c-)는 내 실수라 레벨과 무관하게 남긴다
 const HIDDEN = new Set(HIDDEN_IDS);
-const atLevel = (u, id) => id.startsWith('c-') || (!HIDDEN.has(id) && (itemOf(u, id)?.lv ?? 0) >= u.level);
+// 레벨업할 때 남겨 둔(keep) 아랫 레벨의 틀린 문제는 졸업할 때까지 복습에 남는다
+const atLevel = (u, id) => id.startsWith('c-') || !!u.items[id]?.keep || (!HIDDEN.has(id) && (itemOf(u, id)?.lv ?? 0) >= u.level);
+
+// 레벨업: 지금 레벨 문제(단어+문법)를 다 한 번씩 풀면 '올라갈까요?'를 묻는다(사용자 결정 2026-10-19: 자동이 아니라 물어보고)
+const LEVEL_KO = { 1: '초등', 2: '중등', 3: '고등', 4: '실전' };
+function levelUpOffer(u) {
+  if (u.level >= 4 || u.levelUpDeclined === u.level) return null;
+  const left = [...WORDS, ...GRAMMAR].some(x => x.lv === u.level && !HIDDEN.has(x.id) && !u.items[x.id]);
+  return left ? null : { from: u.level, to: u.level + 1 };
+}
 
 function queue(u, kind, mode) {
   const t = today();
@@ -167,7 +225,7 @@ function queue(u, kind, mode) {
     .map(([id]) => id);
   const backlog = due.length >= plan.reviewCap;
   const newLeft = backlog ? 0 : Math.max(0, plan[kind] - (u.days[t]?.[kind].new ?? 0));
-  const fresh = freshOrder(BANK[kind].filter(x => !u.items[x.id] && !HIDDEN.has(x.id) && x.lv >= u.level), u.level)
+  const fresh = freshOrder(bankOf(kind).filter(x => !u.items[x.id] && !HIDDEN.has(x.id) && x.lv >= u.level), u.level)
     .slice(0, newLeft)
     .map(x => x.id);
   return [...due, ...fresh];
@@ -178,7 +236,7 @@ function question(u, id) {
   const s = u.items[id];
   const q = { ...x, box: s?.box ?? 0, isNew: !s, wrongCount: s?.wrong ?? 0 };
   if (x.kind === 'word') {
-    q.distractors = pickDistractors(x, shuffle, fixedDistractors);
+    q.distractors = pickDistractors(x, shuffle, x.distractors ? { [x.id]: x.distractors } : fixedDistractors);
   }
   return q;
 }
@@ -273,6 +331,7 @@ async function readBody(req) {
 
 async function api(req, env, url) {
   await init(env);
+  await loadGen(env);
   const route = `${req.method} ${url.pathname}`;
   const body = req.method === 'POST' ? await readBody(req) : {};
   const secure = url.protocol === 'https:' ? '; Secure' : '';
@@ -304,7 +363,21 @@ async function api(req, env, url) {
       return json({}, 200, { 'Set-Cookie': 'sid=; Path=/; Max-Age=0' });
     case 'GET /api/me': {
       const todayDiary = await get(env, `diary:${u.id}:${today()}`);
-      return json({ ...stats(u), plans: PLANS, preview: { word: preview(u, 'word'), grammar: preview(u, 'grammar') }, diaryToday: !!todayDiary?.text });
+      return json({ ...stats(u), plans: PLANS, preview: { word: preview(u, 'word'), grammar: preview(u, 'grammar') }, diaryToday: !!todayDiary?.text, levelUp: levelUpOffer(u) });
+    }
+    case 'POST /api/levelup': {
+      const offer = levelUpOffer(u);
+      if (!offer) throw err(400, '아직 지금 레벨 문제가 남아 있어요');
+      if (!body.accept) {
+        u.levelUpDeclined = u.level; // 이 레벨에서는 다시 묻지 않는다(설정에서 직접 올릴 수 있음)
+        await saveUser();
+        return json({});
+      }
+      for (const [id, s] of Object.entries(u.items)) if (!graduated(s) && (itemOf(u, id)?.lv ?? 9) < offer.to) s.keep = true;
+      u.level = offer.to;
+      await saveUser();
+      notifyLater(env, others(u.id), { title: `🎉 ${nameOf(u.id)}님이 ${LEVEL_KO[offer.to]}으로 레벨 업했어요`, body: `${LEVEL_KO[offer.from]} 문제를 전부 풀었어요`, url: '/#/friends' });
+      return json(offer);
     }
     case 'GET /api/placement': {
       // 볼 때마다 다른 문제: 레벨·종류(어휘/문법)별 풀에서 3개씩 무작위로 뽑되, 지난번에 본 문제는 되도록 피한다
@@ -587,6 +660,15 @@ async function api(req, env, url) {
       await saveUser();
       return json({});
     }
+    case 'POST /api/report': {
+      // AI 문제 신고: 공용 풀에서 바로 뺀다(사람이 검수한 고정 문제는 대상 아님)
+      const x = GEN.byId.get(String(body.id || ''));
+      if (!x) throw err(404, '없는 문제예요');
+      await env.DB.prepare('UPDATE gen SET v = ? WHERE id = ?').bind(JSON.stringify({ ...x, reported: u.id }), x.id).run();
+      console.log(`report ${x.id} by ${u.id}`);
+      GEN.at = 0; // 다음 요청에서 다시 읽기
+      return json({});
+    }
   }
   throw err(404, 'not found');
 }
@@ -595,10 +677,11 @@ async function api(req, env, url) {
 const commentText = t => String(t ?? '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 300);
 
 export default {
-  // 저녁 리마인더(Cron, wrangler.jsonc env.app의 triggers): 그날 미션을 안 끝낸 사람에게만
+  // Cron(wrangler.jsonc env.app의 triggers): 아침 새 문제 보충, 저녁 리마인더는 그날 미션을 안 끝낸 사람에게만
   async scheduled(event, env) {
     USERS = parseUsers(env);
     await init(env);
+    if (event.cron === GEN_CRON) return refill(env);
     const t = today();
     for (const uid of Object.keys(USERS)) {
       const x = await get(env, 'user:' + uid);

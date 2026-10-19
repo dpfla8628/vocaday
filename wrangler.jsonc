@@ -15,7 +15,7 @@
       "name": "vocaday-app",
       "observability": { "enabled": true },
       "vars": { "VAPID_PUBLIC_KEY": "BP_mhN4QeT_q8nS2T8ZaNMK9IHCY_Fe75euJdZB5cQ5wE2fAeErHPKbi2S3sNLr-nG9ZDtZ6bQmcdGH-MK7qQVY", "VAPID_SUBJECT": "https://github.com/dpfla8628/vocaday" },
-      "triggers": { "crons": ["0 11 * * *"] }, // 매일 20:00 KST 미션 리마인더
+      "triggers": { "crons": ["0 11 * * *", "30 0 * * *"] }, // 매일 20:00 KST 미션 리마인더, 매일 09:30 KST 새 문제 보충(src/worker.js GEN_CRON)
       "assets": { "directory": "./dist-app", "binding": "ASSETS" },
       "ai": { "binding": "AI" },
       "d1_databases": [

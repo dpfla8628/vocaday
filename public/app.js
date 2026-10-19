@@ -139,6 +139,7 @@ function login() {
 async function home() {
   const [me, board] = await Promise.all([api('me'), api('board')]);
   if (!me.placed) return go('#/placement'); // 처음엔 레벨 테스트부터
+  if (me.levelUp) return levelUp(me.levelUp); // 지금 레벨 문제를 다 풀었으면 올라갈지 묻는다
   const friend = board.users.find(u => u.id !== me.id);
   const todayDone = me.today.word.done && me.today.grammar.done;
   app.innerHTML = `
@@ -159,6 +160,36 @@ async function home() {
   ${tabs('home')}`;
 }
 const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
+
+function levelUp({ from, to }) {
+  const [a, b] = [LEVELS[from][0], LEVELS[to][0]];
+  app.innerHTML = `
+  <section class="page center">
+    <div class="big-emoji">🎉</div>
+    <h1>${a} 문제를 다 풀었어요!</h1>
+    <p class="sub">${b}으로 올라갈까요? · ${LEVELS[to][1]}</p>
+    <button class="btn primary big" id="up">${b}으로 올라가기</button>
+    <button class="btn ghost" id="stay">지금 레벨 유지</button>
+    <p class="small">유지해도 ${b} 문제는 이어서 나와요. 레벨은 설정에서 언제든 바꿀 수 있어요.</p>
+  </section>`;
+  const box = app.querySelector('section');
+  const fail = err => (box.querySelector('.small').textContent = err.message);
+  $('#up').onclick = e =>
+    pending(e.currentTarget, box, async () => {
+      await api('levelup', { accept: true });
+      app.innerHTML = `
+      <section class="page center">
+        <div class="big-emoji">🏆</div>
+        <h1>레벨 업!</h1>
+        <p class="level-big">${a} → ${b}</p>
+        <p class="sub">${LEVELS[to][1]}</p>
+        <p class="small">${a}에서 틀린 문제는 다 맞힐 때까지 복습에 계속 나와요.</p>
+        <a class="btn primary big" href="#/home" id="home">시작하기</a>
+      </section>`;
+      $('#home').onclick = e => (e.preventDefault(), home());
+    }).catch(fail);
+  $('#stay').onclick = e => pending(e.currentTarget, box, async () => (await api('levelup', { accept: false }), home())).catch(fail);
+}
 
 function mission(kind, me) {
   const p = me.preview[kind];
@@ -192,6 +223,8 @@ function friendMini(f, together) {
 }
 
 // ---------- 퀴즈 ----------
+const isAI = it => /^a[wg]\d-/.test(it.id); // AI가 자동으로 만든 문제(src/generate.js)
+
 async function quiz(kind, mode) {
   if (!KIND_NAMES[kind]) return go('#/home');
   const { items, headwords } = await api(`session?kind=${kind}${mode ? '&mode=' + mode : ''}`);
@@ -217,8 +250,9 @@ async function quiz(kind, mode) {
   function badge(it) {
     if (misses.get(it.id)) return '<span class="chip warn">틀린 문제 · 다시</span>';
     if (mode === 'wrong') return `<span class="chip warn">오답 복습${it.wrongCount ? ` · ${it.wrongCount}번 틀림` : ''}</span>`;
-    if (it.isNew) return '<span class="chip new">새 문제</span>';
-    return `<span class="chip">복습</span>${it.wrongCount ? `<span class="chip warn">${it.wrongCount}번 틀렸던 문제</span>` : ''}`;
+    const ai = isAI(it) ? '<span class="chip soft">AI 문제</span>' : '';
+    if (it.isNew) return '<span class="chip new">새 문제</span>' + ai;
+    return `<span class="chip">복습</span>${ai}${it.wrongCount ? `<span class="chip warn">${it.wrongCount}번 틀렸던 문제</span>` : ''}`;
   }
 
   function next() {
@@ -521,7 +555,17 @@ async function quiz(kind, mode) {
         ${it.tip ? `<p class="tip">💡 ${esc(it.tip)}</p>` : ''}
         ${ok ? '' : `<p class="small">${missed < MAX_MISSES ? '이 문제는 마지막에 한 번 더, 그리고 내일 다시 나와요.' : '오늘은 여기까지! 이 문제는 내일 복습에서 다시 만나요.'}</p>`}
         <button class="btn big ${ok ? 'success' : 'danger'}" id="cont">계속하기</button>
+        ${isAI(it) ? '<button class="btn ghost sm" id="report">🚩 이 문제 이상해요</button>' : ''}
       </div>`;
+    // AI가 만든 문제가 이상하면 바로 빼 달라고 신고(서버가 공용 문제 풀에서 지운다)
+    if (isAI(it))
+      $('#report').onclick = e => {
+        const b = e.currentTarget;
+        b.disabled = true;
+        api('report', { id: it.id })
+          .then(() => (b.textContent = '신고했어요. 이 문제는 다시 안 나와요'))
+          .catch(() => ((b.disabled = false), (b.textContent = '신고 실패 — 다시 눌러 주세요')));
+      };
     speak(full);
     $('#sayFull').onclick = () => speak(full);
     let moved = false;

@@ -122,4 +122,40 @@ cookie = '';
 assert.equal((await call('login', { id: ID2, pw: PW2 })).status, 200);
 const tg = (await call('push/next')).data;
 assert.ok(tg.title?.includes('태그') && tg.body.includes('look'), `태그 알림이 없음: ${JSON.stringify(tg)}`);
+
+// 레벨업: 지금 레벨 문제를 다 풀면 물어본다 → 유지하면 다시 안 묻고, 올라가면 이전 레벨의 틀린 문제는 복습에 남는다
+cookie = '';
+assert.equal((await call('login', { id: ID, pw: PW })).status, 200);
+const lvBefore = (await call('me')).data.level;
+assert.equal((await call('settings', { level: 1, plan: 'normal' })).status, 200);
+assert.equal((await call('me')).data.levelUp, null, '1단계 문제가 남았는데 레벨업을 물어봄');
+assert.equal((await call('levelup', { accept: true })).status, 400);
+const loadC = f => JSON.parse(readFileSync(new URL('../content/' + f, import.meta.url), 'utf8'));
+const [miss, ...rest1] = [...loadC('words_lv1.json'), ...loadC('grammar_lv12.json')].filter(x => x.lv === 1 && !HIDDEN.includes(x.id));
+await call('answer', { id: miss.id, correct: false });
+for (const x of rest1) await call('answer', { id: x.id, correct: true });
+assert.deepEqual((await call('me')).data.levelUp, { from: 1, to: 2 });
+assert.equal((await call('levelup', { accept: false })).status, 200);
+assert.equal((await call('me')).data.levelUp, null, '유지를 골랐는데 또 물어봄');
+assert.equal((await call('me')).data.level, 1);
+// 유지했어도 설정에서 바꾸면(같은 레벨) 기록은 그대로 → 직접 2단계로 올리는 건 언제든 가능
+await call('settings', { level: 2, plan: 'normal' });
+assert.ok(!(await call('wrongs')).data.items.some(x => x.id === miss.id), '설정으로 올리면 아랫 레벨 오답은 빠짐(기존 규칙)');
+await call('settings', { level: 1, plan: 'normal' });
+assert.equal((await call('levelup', { accept: true })).status, 400, '유지를 고른 레벨에서는 다시 묻지 않음');
+await call('settings', { level: lvBefore, plan: 'normal' });
+// 올라가기(두 번째 계정): 레벨이 오르고, 1단계에서 틀린 문제는 오답노트·복습에 남는다
+cookie = '';
+assert.equal((await call('login', { id: ID2, pw: PW2 })).status, 200);
+const lv2Before = (await call('me')).data.level;
+await call('settings', { level: 1, plan: 'normal' });
+await call('answer', { id: miss.id, correct: false });
+for (const x of rest1) await call('answer', { id: x.id, correct: true });
+assert.deepEqual((await call('levelup', { accept: true })).data, { from: 1, to: 2 });
+const after2 = (await call('me')).data;
+assert.equal(after2.level, 2);
+assert.equal(after2.levelUp, null);
+assert.ok((await call('wrongs')).data.items.some(x => x.id === miss.id), '레벨업 전에 틀린 문제가 오답노트에서 사라짐');
+assert.ok((await call('session?kind=' + (miss.ex ? 'word' : 'grammar') + '&mode=wrong')).data.items.some(x => x.id === miss.id), '레벨업 전에 틀린 문제가 오답 복습에 안 나옴');
+await call('settings', { level: lv2Before, plan: 'normal' });
 console.log('smoke ok');
