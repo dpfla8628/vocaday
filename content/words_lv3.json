@@ -380,7 +380,7 @@
   {"id":"w3-382","lv":3,"en":"intimate","ko":"친밀한","pos":"형","ex":"They have an {intimate} friendship that has lasted for decades.","exKo":"그들은 수십 년간 이어진 친밀한 우정을 나누고 있다.","alt":[],"near":[]},
   {"id":"w3-383","lv":3,"en":"mutual","ko":"상호의, 서로의","pos":"형","ex":"Their friendship is based on {mutual} respect.","exKo":"그들의 우정은 서로에 대한 존중에 바탕을 두고 있다.","alt":[],"near":["shared"]},
   {"id":"w3-384","lv":3,"en":"conflict","ko":"갈등, 충돌","pos":"명","ex":"The two brothers tried to avoid {conflict} over their late father's house.","exKo":"두 형제는 돌아가신 아버지의 집을 두고 갈등을 피하려 애썼다.","alt":[],"near":["fighting"]},
-  {"id":"w3-385","lv":3,"en":"quarrel","ko":"말다툼하다, 다투다","pos":"동","ex":"The couple next door {quarrel} almost every night.","exKo":"옆집 부부는 거의 매일 밤 말다툼을 한다.","alt":[],"near":["bickers"]},
+  {"id":"w3-385","lv":3,"en":"quarrel","ko":"말다툼하다, 다투다","pos":"동","ex":"He often {quarrels} with his sister over the TV remote.","exKo":"그는 TV 리모컨 때문에 여동생과 자주 말다툼한다.","alt":[],"near":["bickers","argues","fights","squabbles"]},
   {"id":"w3-386","lv":3,"en":"betray","ko":"배신하다","pos":"동","ex":"I can't believe he {betrayed} his best friend for money.","exKo":"그가 돈 때문에 가장 친한 친구를 배신했다니 믿을 수가 없어.","alt":[],"near":[]},
   {"id":"w3-387","lv":3,"en":"rely","ko":"의지하다, 믿다","pos":"동","ex":"Many elderly people {rely} on their children for financial support.","exKo":"많은 노인이 경제적으로 자녀에게 의지한다.","alt":[],"near":["lean","depend","count"]},
   {"id":"w3-388","lv":3,"en":"cooperate","ko":"협력하다","pos":"동","ex":"The two schools agreed to {cooperate} on the science festival.","exKo":"두 학교는 과학 축제에서 서로 협력하기로 했다.","alt":[],"near":[]},
