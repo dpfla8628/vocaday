@@ -390,7 +390,7 @@
   {"id":"w4-407","lv":4,"en":"loathe","ko":"몹시 싫어하다, 질색하다","pos":"동","ex":"She {loathed} every minute of the three-hour meeting.","exKo":"그녀는 세 시간짜리 회의의 매 순간이 질색이었다.","alt":[],"near":["detested","despised","hated"]},
   {"id":"w4-408","lv":4,"en":"scoff","ko":"비웃다, 코웃음 치다","pos":"동","ex":"People {scoffed} at the idea of a phone without buttons.","exKo":"사람들은 버튼 없는 휴대폰이라는 아이디어에 코웃음을 쳤다.","alt":[],"near":["laughed","sneered"]},
   {"id":"w4-409","lv":4,"en":"sulk","ko":"삐치다, 부루퉁하다","pos":"동","ex":"He's been {sulking} in his room since we said no to the sleepover.","exKo":"친구 집에서 자고 오는 걸 안 된다고 했더니 그 애가 방에서 계속 삐쳐 있어.","alt":[],"near":["pouting"]},
-  {"id":"w4-410","lv":4,"en":"brag","ko":"자랑하다, 떠벌리다","pos":"동","ex":"He never stops {bragging} about his new car.","exKo":"그는 새 차 자랑을 끝도 없이 한다.","alt":[],"near":["boasting"]},
+  {"id":"w4-410","lv":4,"en":"brag","ko":"자랑하다, 떠벌리다","pos":"동","ex":"He never stops {bragging} about his new car.","exKo":"그는 새 차 자랑을 끝도 없이 한다.","alt":["boasting"],"near":["boasting"]},
   {"id":"w4-411","lv":4,"en":"nag","ko":"잔소리하다, 들볶다","pos":"동","ex":"My mom keeps {nagging} me to get a haircut.","exKo":"엄마가 머리 좀 자르라고 계속 잔소리를 해.","alt":[],"near":["bugging","telling"]},
   {"id":"w4-412","lv":4,"en":"fret","ko":"조바심치다, 애태우다","pos":"동","ex":"Don't {fret} about the test; you've studied plenty.","exKo":"시험 때문에 애태우지 마. 너 공부 충분히 했어.","alt":[],"near":["fuss","stew"]},
   {"id":"w4-413","lv":4,"en":"fidget","ko":"꼼지락거리다, 안절부절못하다","pos":"동","ex":"Kids start to {fidget} if the movie is too long.","exKo":"영화가 너무 길면 아이들이 몸을 배배 꼬기 시작한다.","alt":[],"near":["squirm"]},

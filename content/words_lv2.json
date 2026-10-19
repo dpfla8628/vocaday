@@ -470,7 +470,7 @@
   {"id":"w2-469","lv":2,"en":"allowance","ko":"용돈","pos":"명","ex":"My parents give me a weekly {allowance} of 20,000 won.","exKo":"부모님은 나한테 일주일에 2만 원씩 용돈을 주셔.","alt":[],"near":[]},
   {"id":"w2-470","lv":2,"en":"usually","ko":"보통, 대개","pos":"부","ex":"I {usually} get up at seven, but today I slept in.","exKo":"난 보통 7시에 일어나는데 오늘은 늦잠 잤어.","alt":[],"near":[]},
   {"id":"w2-471","lv":2,"en":"rarely","ko":"좀처럼 ~하지 않는, 드물게","pos":"부","ex":"My dad {rarely} drinks coffee because it keeps him awake.","exKo":"아빠는 커피를 마시면 잠이 안 와서 커피를 좀처럼 안 드셔.","alt":[],"near":["seldom","hardly"]},
-  {"id":"w2-472","lv":2,"en":"hardly","ko":"거의 ~않다","pos":"부","ex":"It was so noisy that I could {hardly} hear him.","exKo":"너무 시끄러워서 그의 말이 거의 들리지 않았다.","alt":[],"near":["barely"]},
+  {"id":"w2-472","lv":2,"en":"hardly","ko":"거의 ~않다","pos":"부","ex":"It was so noisy that I could {hardly} hear him.","exKo":"너무 시끄러워서 그의 말이 거의 들리지 않았다.","alt":["barely"],"near":["barely"]},
   {"id":"w2-473","lv":2,"en":"almost","ko":"거의, 하마터면","pos":"부","ex":"I {almost} missed the bus this morning.","exKo":"오늘 아침에 하마터면 버스를 놓칠 뻔했어.","alt":[],"near":["nearly"]},
   {"id":"w2-474","lv":2,"en":"already","ko":"이미, 벌써","pos":"부","ex":"When I got to the theater, the movie had {already} started.","exKo":"내가 극장에 도착했을 때 영화는 이미 시작한 뒤였다.","alt":[],"near":[]},
   {"id":"w2-475","lv":2,"en":"still","ko":"아직(도), 여전히","pos":"부","ex":"It's 2 a.m., and my brother is {still} playing games.","exKo":"새벽 2시인데 동생은 아직도 게임을 하고 있어.","alt":[],"near":[]},
